@@ -1,0 +1,12 @@
+# Condition D: Full defense — 3-layer defense vs multi-step chain attack
+name: defense_full
+attack_type: multi_step_chain
+defense_layers:
+  - anomaly_filter
+  - provenance
+  - consistency
+agent_model: local_llm
+use_mock: true
+n_steps: 50
+env_seed: 0
+filter_path: data/filter_fitted.pkl

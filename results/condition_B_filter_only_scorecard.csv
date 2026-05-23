@@ -1,0 +1,2 @@
+condition,total_steps,total_episodes,CAR,MTTF,CatchRate,FPR,mean_latency_ms,p95_latency_ms,DST,AER,catastrophic_steps,total_poisoned,caught_poisoned
+B_filter_only,180,3,0.0667,0.0,0.0,0.0,0.79,2.67,,1.0,12,127,0

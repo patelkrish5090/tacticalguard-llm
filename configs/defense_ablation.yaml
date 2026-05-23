@@ -1,0 +1,10 @@
+# Condition B/C: Ablation — observation poison attack, anomaly filter only
+name: ablation_filter_only
+attack_type: obs_poison
+defense_layers:
+  - anomaly_filter
+agent_model: local_llm
+use_mock: true
+n_steps: 30
+env_seed: 0
+filter_path: data/filter_fitted.pkl

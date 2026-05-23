@@ -1,0 +1,2 @@
+condition,total_steps,total_episodes,CAR,MTTF,CatchRate,FPR,mean_latency_ms,p95_latency_ms,DST,AER,catastrophic_steps,total_poisoned,caught_poisoned
+E_adaptive_whitebox,300,3,0.36,2.0,0.0,0.0,2.38,12.65,,1.0,108,300,0

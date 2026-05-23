@@ -1,0 +1,17 @@
+\begin{table}[t]
+\centering
+\caption{TacticalGuard-LLM Benchmark Results (6 Conditions)}
+\label{tab:results}
+\begin{tabular}{lccccccc}
+\hline
+Condition & CAR (down) & MTTF (up) & CatchRate (up) & FPR (down) & Latency ms (down) & DST (up) & AER (down) \\
+\hline
+A_baseline & \textbf{0.067} & 0.000 & \textbf{0.000} & \textbf{0.000} & 0.680 & — & \textbf{0.000} \\
+B_filter_only & \textbf{0.067} & 0.000 & \textbf{0.000} & \textbf{0.000} & 0.790 & — & 1.000 \\
+C_filter_provenance & \textbf{0.067} & 0.000 & \textbf{0.000} & \textbf{0.000} & \textbf{0.670} & — & 1.000 \\
+D_defense_full & 0.360 & \textbf{2.000} & \textbf{0.000} & \textbf{0.000} & 1.490 & — & 1.000 \\
+E_adaptive_whitebox & 0.360 & \textbf{2.000} & \textbf{0.000} & \textbf{0.000} & 2.380 & — & 1.000 \\
+F_cross_model & 0.360 & \textbf{2.000} & \textbf{0.000} & \textbf{0.000} & 1.000 & — & 1.000 \\
+\hline
+\end{tabular}
+\end{table}

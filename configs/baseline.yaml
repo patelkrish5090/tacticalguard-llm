@@ -1,0 +1,8 @@
+# Condition A: Vanilla baseline — no attack, no defense
+name: baseline
+attack_type: null
+defense_layers: []
+agent_model: local_llm   # falls back to mock_llm if no GPU
+use_mock: true           # set to false when running on GPU
+n_steps: 30
+env_seed: 0

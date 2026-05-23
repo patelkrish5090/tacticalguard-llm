@@ -1,0 +1,15 @@
+{
+  "total_steps": 300,
+  "total_episodes": 3,
+  "CAR": 0.36,
+  "MTTF": 2.0,
+  "CatchRate": 0.0,
+  "FPR": 0.0,
+  "mean_latency_ms": 2.38,
+  "p95_latency_ms": 12.65,
+  "DST": null,
+  "AER": 1.0,
+  "catastrophic_steps": 108,
+  "total_poisoned": 300,
+  "caught_poisoned": 0
+}

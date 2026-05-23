@@ -1,0 +1,13 @@
+# Condition E (NOVEL): Adaptive attacker vs full 3-layer defense
+name: adaptive_vs_defense
+attack_type: adaptive
+defense_layers:
+  - anomaly_filter
+  - provenance
+  - consistency
+agent_model: local_llm
+use_mock: true
+n_steps: 50
+env_seed: 0
+filter_path: data/filter_fitted.pkl
+# adaptive_mode: whitebox  # set to 'blackbox' for black-box variant

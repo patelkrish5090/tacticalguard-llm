@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env
+cage-challenge-4/
+data/clean_observations.jsonl
+data/filter_fitted.pkl
+logs/
+results/*.jsonl
+*.pkl
+.DS_Store
