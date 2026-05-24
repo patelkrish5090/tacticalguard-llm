@@ -26,129 +26,131 @@ print(result.stdout if result.returncode == 0 else "No GPU detected — switch t
 from google.colab import drive
 drive.mount('/content/drive')
 
-# Project will live here on Drive:
-PROJECT_DIR = "/content/drive/MyDrive/tacticalguard-llmv2"
-
 import os
-os.makedirs(PROJECT_DIR, exist_ok=True)
-print(f"Project directory: {PROJECT_DIR}")
+os.makedirs("/content/drive/MyDrive/tacticalguard-results", exist_ok=True)
+print("Google Drive mounted ✓")
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  CELL 3 — Clone / Upload the project                                ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-# Option A: If you pushed to GitHub (recommended):
+# Option A: GitHub (recommended — push your project first)
 # !git clone https://github.com/YOUR_USERNAME/tacticalguard-llmv2.git /content/tacticalguard-llmv2
 
-# Option B: Upload as zip from your local machine, then unzip:
+# Option B: Upload zip
 # from google.colab import files
 # uploaded = files.upload()   # select tacticalguard-llmv2.zip
 # !unzip -q tacticalguard-llmv2.zip -d /content/
 
-# Option C: Copy from Google Drive if you already uploaded the folder:
+# Option C: Already on Drive
 # !cp -r "/content/drive/MyDrive/tacticalguard-llmv2" /content/tacticalguard-llmv2
 
-# After cloning/uploading, set the working directory:
-import os
-os.chdir("/content/tacticalguard-llmv2")  # adjust if needed
+import os, sys
+os.chdir("/content/tacticalguard-llmv2")   # ← adjust if path differs
+sys.path.insert(0, "/content/tacticalguard-llmv2")
 print("Working directory:", os.getcwd())
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║  CELL 4 — Install all dependencies                                  ║
+# ║  CELL 4 — Install dependencies (Colab-safe, no downgrades)         ║
+# ║                                                                      ║
+# ║  KEY INSIGHT: Colab already ships torch 2.10+cu128, numpy 2.x.     ║
+# ║  Do NOT reinstall them — just add what's missing and upgrade        ║
+# ║  typing-extensions (fixes the typeguard/pytest crash).             ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-# Installs everything in requirements.txt + sentence-transformers extras
-get_ipython().system('pip install -q torch>=2.2.0 transformers>=4.40.0 accelerate>=0.27.0')
-get_ipython().system('pip install -q bitsandbytes>=0.43.0')
-get_ipython().system('pip install -q sentence-transformers>=2.6.0')
-get_ipython().system('pip install -q scikit-learn>=1.4.0 pandas>=2.2.0 numpy>=1.26.0')
-get_ipython().system('pip install -q pyyaml>=6.0.1 tqdm>=4.66.0 openai>=1.23.0')
-get_ipython().system('pip install -q matplotlib>=3.8.0 seaborn>=0.13.0 jsonlines>=4.0.0')
-print("All dependencies installed.")
+
+# Step 1: Fix typing-extensions FIRST — this is what breaks pytest
+# typeguard 4.5.1 needs NoExtraItems from typing_extensions>=4.14.0
+get_ipython().system('pip install -q -U "typing-extensions>=4.14.0"')
+
+# Step 2: transformers stack (do NOT pin torch — Colab has 2.10 already)
+get_ipython().system('pip install -q "transformers>=4.40.0" "accelerate>=0.27.0"')
+
+# Step 3: bitsandbytes (0.49.2 is in Colab; needs torch>=2.3 which is satisfied)
+get_ipython().system('pip install -q "bitsandbytes>=0.43.0"')
+
+# Step 4: Sentence embeddings + anomaly filter
+get_ipython().system('pip install -q "sentence-transformers>=2.6.0"')
+get_ipython().system('pip install -q "scikit-learn>=1.4.0"')
+
+# Step 5: Utilities (no numpy pin — Colab has 2.x which is fine)
+get_ipython().system('pip install -q "pyyaml>=6.0.1" "tqdm>=4.66.0" "openai>=1.23.0"')
+get_ipython().system('pip install -q "matplotlib>=3.8.0" "seaborn>=0.13.0" "jsonlines>=4.0.0" "pandas>=2.2.0"')
+
+print("\nAll dependencies installed.")
+print("Verifying critical imports...")
+
+import_checks = [
+    "import torch; print(f'  torch {torch.__version__} ✓')",
+    "import transformers; print(f'  transformers {transformers.__version__} ✓')",
+    "import sentence_transformers; print(f'  sentence-transformers ✓')",
+    "import sklearn; print(f'  scikit-learn {sklearn.__version__} ✓')",
+    "import numpy; print(f'  numpy {numpy.__version__} ✓')",
+    "import typing_extensions; print(f'  typing-extensions {typing_extensions.__version__} ✓')",
+]
+import subprocess
+for check in import_checks:
+    r = subprocess.run(["python", "-c", check], capture_output=True, text=True)
+    print(r.stdout.strip() if r.returncode == 0 else f"  ✗ {r.stderr.strip()[:80]}")
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║  CELL 5 — Set secrets / tokens                                      ║
+# ║  CELL 5 — Install CAGE 4 real environment                          ║
+# ║  The dependency conflicts shown are Colab-level WARNING only —     ║
+# ║  they do NOT affect TacticalGuard-LLM code.                        ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-import os
+get_ipython().system('git clone -q https://github.com/cage-challenge/cage-challenge-4.git')
+get_ipython().system('pip install -q -e cage-challenge-4/')
 
-# ── HuggingFace Token (REQUIRED for LLaMA 3.1-8B) ────────────────────
-# Get yours at: https://huggingface.co/settings/tokens
-# Also request model access at: https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct
-#
-# Recommended: use Colab Secrets (🔑 icon in left sidebar):
-#   Key name:  HF_TOKEN
-#   Value:     hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-#
-# Then read it securely:
+# CRITICAL: CAGE 4 may downgrade typing-extensions again — re-pin it
+get_ipython().system('pip install -q -U "typing-extensions>=4.14.0"')
+print("CAGE 4 installed ✓  |  typing-extensions re-pinned ✓")
+
+
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  CELL 6 — Set tokens securely via Colab Secrets                    ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+# Add secrets via the 🔑 icon in the left sidebar:
+#   Key: HF_TOKEN        Value: hf_xxxxxxxxxxxxxxxxxxxx
+#   Key: OPENAI_API_KEY  Value: sk-proj-xxxxxxxxxxxxxxx  (optional)
+
+import os
 from google.colab import userdata
+
 try:
     os.environ["HF_TOKEN"] = userdata.get("HF_TOKEN")
     print("HF_TOKEN loaded from Colab Secrets ✓")
 except Exception:
-    # Fallback: paste directly (less secure)
     os.environ["HF_TOKEN"] = "hf_PASTE_YOUR_TOKEN_HERE"
-    print("HF_TOKEN set manually (consider using Colab Secrets instead)")
+    print("⚠  HF_TOKEN not in Secrets — paste yours above")
 
-# ── OpenAI API Key (OPTIONAL — only for Condition F: GPT-4o-mini) ─────
-# Get yours at: https://platform.openai.com/api-keys
 try:
     os.environ["OPENAI_API_KEY"] = userdata.get("OPENAI_API_KEY")
     print("OPENAI_API_KEY loaded from Colab Secrets ✓")
 except Exception:
-    os.environ["OPENAI_API_KEY"] = ""  # Leave empty to skip Condition F
-    print("OPENAI_API_KEY not set — Condition F (GPT-4o-mini) will be skipped")
+    os.environ["OPENAI_API_KEY"] = ""
+    print("OPENAI_API_KEY not set — Condition F will be skipped")
 
-# ── HuggingFace login (authenticates model download) ─────────────────
 from huggingface_hub import login
 login(token=os.environ["HF_TOKEN"], add_to_git_credential=False)
 print("HuggingFace login successful ✓")
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║  CELL 6 — (Optional) Install CAGE 4 real environment               ║
+# ║  CELL 7 — Run tests (expected: 26 passed, 2 warnings)              ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-# Skip this if you want to use the MockCAGE4Wrapper (faster, no install needed)
-# Uncomment to install the real CAGE 4:
-#
-# !git clone https://github.com/cage-challenge/cage-challenge-4.git
-# !pip install -q -e cage-challenge-4/
-# print("CAGE 4 installed ✓")
-print("Skipping real CAGE 4 install — using MockCAGE4Wrapper (fast mode)")
-
-
-# ╔══════════════════════════════════════════════════════════════════════╗
-# ║  CELL 7 — Run tests to verify everything works                      ║
-# ╚══════════════════════════════════════════════════════════════════════╝
+# If you still see typeguard ImportError → re-run Cell 4 and Cell 5 ending
 get_ipython().system('python -m pytest tests/ -v --tb=short 2>&1')
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║  CELL 8 — Generate clean data + fit anomaly filter                 ║
-# ║  (Required before running conditions B-F)                           ║
+# ║  CELL 8 — Generate clean data + fit anomaly filter (~3-5 min)      ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-# ~3-5 minutes: generates 200 clean episodes + fits IsolationForest + tunes threshold
 get_ipython().system('python scripts/generate_clean_data.py --n_episodes 200 --n_steps 50')
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║  CELL 9 — Run baseline (no attack, no defense — MockLLM)           ║
-# ╚══════════════════════════════════════════════════════════════════════╝
-get_ipython().system('python run_baseline.py --n_episodes 10 --n_steps 50 --agent_model mock')
-
-
-# ╔══════════════════════════════════════════════════════════════════════╗
-# ║  CELL 10 — Run baseline with REAL LLaMA 3.1-8B-Instruct (4-bit)   ║
-# ║  Requires GPU + HF_TOKEN set above                                  ║
-# ╚══════════════════════════════════════════════════════════════════════╝
-# NOTE: First run will download ~5GB model weights. Subsequent runs use cache.
-# T4 (free Colab) can handle 4-bit LLaMA 3.1-8B (~6GB VRAM needed)
-get_ipython().system('python run_baseline.py --n_episodes 10 --n_steps 30 --agent_model local_llm')
-
-
-# ╔══════════════════════════════════════════════════════════════════════╗
-# ║  CELL 11 — Quick smoke test: all conditions with MockLLM (fast)    ║
-# ║  Use this to verify pipeline before running full LLaMA experiments  ║
+# ║  CELL 9 — Quick smoke test: all 5 conditions with MockLLM (<60s)  ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 get_ipython().system('python run_all_experiments.py --n_episodes 10 --conditions A B C D E --skip_openai')
 

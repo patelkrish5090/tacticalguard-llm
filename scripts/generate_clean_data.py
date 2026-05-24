@@ -19,7 +19,17 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Ensure project root is on sys.path regardless of invocation directory.
+# Handles: python scripts/generate_clean_data.py  (from project root)
+#          python /abs/path/scripts/generate_clean_data.py  (from anywhere)
+_project_root = str(Path(__file__).resolve().parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+# Also add cwd in case running from a subdirectory
+import os as _os
+_cwd = _os.getcwd()
+if _cwd not in sys.path:
+    sys.path.insert(0, _cwd)
 
 logging.basicConfig(
     level=logging.INFO,
