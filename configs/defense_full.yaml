@@ -1,0 +1,9 @@
+name: defense_full
+attack_type: multi_step_chain
+defense_layers:
+  - anomaly_filter
+  - provenance
+  - consistency
+agent_model: mock
+n_steps: 50
+filter_path: data/filter_fitted.pkl

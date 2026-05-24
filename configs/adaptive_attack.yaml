@@ -1,0 +1,12 @@
+name: adaptive_vs_defense
+attack_type: adaptive
+defense_layers:
+  - anomaly_filter
+  - provenance
+  - consistency
+agent_model: mock
+n_steps: 50
+filter_path: data/filter_fitted.pkl
+# Adaptive attacker uses white-box access to the filter (pass filter_ref)
+# Set to false for black-box mode (no filter access)
+adaptive_whitebox: true

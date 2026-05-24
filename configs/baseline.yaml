@@ -1,0 +1,6 @@
+name: baseline
+attack_type: null
+defense_layers: []
+agent_model: mock
+n_steps: 50
+filter_path: data/filter_fitted.pkl
