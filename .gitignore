@@ -13,8 +13,8 @@ dist/
 # Virtual environments
 .env
 .venv
-env/
-venv/
+/env/
+/venv/
 
 # Data and results (large files)
 data/clean_observations.jsonl
@@ -48,3 +48,5 @@ Thumbs.db
 
 # CAGE 4 (installed separately)
 cage-challenge-4/
+
+Untitled2.ipynb

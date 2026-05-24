@@ -135,9 +135,13 @@ def run_condition(
     with open(scorecard_path, "w") as f:
         json.dump(metrics, f, indent=2, default=str)
 
-    print(f"  CAR: {metrics.get('CAR', 'N/A'):.3f}  "
-          f"MTTF: {metrics.get('MTTF', 'N/A')}  "
-          f"CatchRate: {metrics.get('CatchRate', 'N/A'):.3f}")
+    def fmt_metric(name: str) -> str:
+        value = metrics.get(name)
+        return f"{value:.3f}" if isinstance(value, (int, float)) else "N/A"
+
+    print(f"  CAR: {fmt_metric('CAR')}  "
+          f"MTTF: {fmt_metric('MTTF')}  "
+          f"CatchRate: {fmt_metric('CatchRate')}")
 
     return metrics
 
@@ -181,6 +185,14 @@ def main():
         "--skip_openai", action="store_true",
         help="Skip condition F (requires OPENAI_API_KEY)"
     )
+    parser.add_argument(
+        "--agent_model", choices=["mock", "local_llm"],
+        help="Override conditions A-E to use mock or local_llm"
+    )
+    parser.add_argument(
+        "--n_steps", type=int,
+        help="Override number of environment steps per episode"
+    )
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -195,6 +207,10 @@ def main():
             continue
 
         config = dict(CONDITIONS[cond_key])
+        if cond_key != "F" and args.agent_model:
+            config["agent_model"] = args.agent_model
+        if args.n_steps:
+            config["n_steps"] = args.n_steps
 
         # Skip openai condition if requested or no API key
         if config.get("agent_model") == "openai_llm" and (
