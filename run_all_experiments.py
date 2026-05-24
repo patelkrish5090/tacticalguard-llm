@@ -87,17 +87,19 @@ CONDITION_CONFIGS = {
 }
 
 
-def run_all(n_episodes: int = 3, output_dir: str = "results/", real_env: bool = False):
+def run_all(n_episodes: int = 3, output_dir: str = "results/", real_env: bool = False, use_local_llm: bool = False):
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs("logs", exist_ok=True)
 
     all_results = {}
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Override use_mock if real_env is requested
-    if real_env:
-        for cond_key in CONDITION_CONFIGS:
+    # Override config flags if requested
+    for cond_key in CONDITION_CONFIGS:
+        if real_env:
             CONDITION_CONFIGS[cond_key]["use_mock"] = False
+        if use_local_llm and CONDITION_CONFIGS[cond_key]["agent_model"] == "mock_llm":
+            CONDITION_CONFIGS[cond_key]["agent_model"] = "local_llm"
 
     print(f"\n{'='*70}")
     print(f"TacticalGuard-LLM: Running All 6 Conditions ({n_episodes} episodes each)")
@@ -186,9 +188,12 @@ def main():
     parser.add_argument("--output_dir", default="results/")
     parser.add_argument("--real_env", action="store_true",
                         help="Force use_mock=False to use real CAGE 4 environment")
+    parser.add_argument("--use_local_llm", action="store_true",
+                        help="Switch from MockLLM to LocalLLM (Llama 3)")
     args = parser.parse_args()
 
-    results = run_all(n_episodes=args.n_episodes, output_dir=args.output_dir, real_env=args.real_env)
+    results = run_all(n_episodes=args.n_episodes, output_dir=args.output_dir, 
+                      real_env=args.real_env, use_local_llm=args.use_local_llm)
     return results
 
 

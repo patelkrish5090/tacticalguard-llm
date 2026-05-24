@@ -262,12 +262,16 @@ def main():
     parser.add_argument("--output_dir", default="results/")
     parser.add_argument("--use_mock", action="store_true",
                         help="Force MockLLM and MockCAGE4 regardless of config")
+    parser.add_argument("--use_local_llm", action="store_true",
+                        help="Switch agent_model to local_llm (Llama 3)")
     args = parser.parse_args()
 
     config = yaml.safe_load(open(args.config))
     if args.use_mock:
         config["agent_model"] = "mock_llm"
         config["use_mock"] = True
+    elif args.use_local_llm and config.get("agent_model") == "mock_llm":
+        config["agent_model"] = "local_llm"
 
     condition_name = config.get("name", "experiment")
     os.makedirs(args.output_dir, exist_ok=True)
