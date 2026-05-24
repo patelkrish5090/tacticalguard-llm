@@ -17,8 +17,9 @@ echo "Node: $SLURMD_NODENAME"
 echo "Job ID: $SLURM_JOB_ID"
 date
 
-# 1. Load CUDA module if required by your cluster
-# module load cuda/12.1  # Uncomment and adjust if your cluster uses modules
+# 1. Load the exact same Python 3.10 module used during setup
+module purge
+module load python-3.10.8-gcc-11.2.0-dlcmq7k
 
 # 2. Activate Virtual Environment
 source venv_tacticalguard/bin/activate

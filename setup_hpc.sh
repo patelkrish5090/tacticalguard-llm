@@ -10,6 +10,10 @@
 
 echo "🚀 Starting TacticalGuard-LLM HPC setup..."
 
+# 0. Load the required Python 3.10 module to guarantee environment consistency
+module purge
+module load python-3.10.8-gcc-11.2.0-dlcmq7k
+
 # 1. Create and activate virtual environment
 VENV_DIR="venv_tacticalguard"
 if [ ! -d "$VENV_DIR" ]; then
