@@ -1,15 +1,14 @@
 #!/bin/bash
-#SBATCH --job-name=tg_llm_h100
-#SBATCH --output=logs/slurm-%j.out
-#SBATCH --error=logs/slurm-%j.err
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
+#SBATCH -J tg_llm_h100
+#SBATCH -p gpu_h100_4
+#SBATCH --gres=gpu:1
+#SBATCH -N 1
+#SBATCH -n 1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G                 # Requesting 64GB RAM (Node has 1TB)
-#SBATCH --time=24:00:00           # Max time for full paper runs
-# 1. Targeting the H100 partition
-#SBATCH --partition=gpu_h100_4    
-#SBATCH --gres=gpu:1              # Request 1 GPU
+#SBATCH --mem=64G
+#SBATCH -t 24:00:00
+#SBATCH -o slurm.%j.out
+#SBATCH -e slurm.%j.err
 
 # ==============================================================================
 
