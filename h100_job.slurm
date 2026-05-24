@@ -10,9 +10,11 @@
 #
 # ===== TARGETING H100 NODES =====
 # Based on cluster specs: gpu[5-6] have 4x H100 SXM5 80GB
-# If your cluster requires a partition name, add it here (e.g., #SBATCH --partition=gpu)
-# Requesting 1 H100 GPU:
-#SBATCH --nodelist=gpu5,gpu6      # Restrict to the H100 nodes
+# 1. Use partition if your cluster requires it (check with 'sinfo | grep gpu')
+# Example: #SBATCH --partition=gpu_h100_4
+# 
+# 2. Or, restrict by node list if you know the exact names:
+#SBATCH --nodelist=gpu[5-6]       # Target the H100 nodes specifically
 #SBATCH --gres=gpu:1              # Request 1 GPU
 
 # ==============================================================================
