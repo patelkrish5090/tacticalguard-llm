@@ -12,46 +12,63 @@ From: pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
     export PYTHONUNBUFFERED=1
 
 %post
-    # Avoid interactive prompts
     export DEBIAN_FRONTEND=noninteractive
+    export PIP_ROOT_USER_ACTION=ignore
 
-    # Update and install system deps
     apt-get update -y && apt-get install -y \
-        git \
-        curl \
-        build-essential \
+        git curl build-essential \
         && rm -rf /var/lib/apt/lists/*
 
-    # Upgrade pip
-    python -m pip install --upgrade pip setuptools wheel
+    pip install --upgrade pip setuptools wheel
 
-    # Install all project dependencies (torch is already in the base image)
+    # ── Step 1: Install CAGE 4 FIRST ─────────────────────────────────────────
+    # CAGE 4 pins typing_extensions==4.9.0 and pulls gym which downgrades torch.
+    # We let it do its thing here, then override below.
+    cd /opt
+    git clone https://github.com/cage-challenge/cage-challenge-4.git
+    pip install --no-cache-dir -e /opt/cage-challenge-4/
+
+    # ── Step 2: Reinstall correct PyTorch AFTER CAGE (overrides its torch 2.2) ─
+    # CAGE's gym dependency downgrades torch, so we force-reinstall 2.5.1+cu121.
+    pip install --no-cache-dir --force-reinstall \
+        torch==2.5.1+cu121 \
+        torchvision==0.20.1+cu121 \
+        torchaudio==2.5.1+cu121 \
+        --index-url https://download.pytorch.org/whl/cu121
+
+    # ── Step 3: Install project dependencies ─────────────────────────────────
+    # Pin transformers to <5.0 — transformers 5.9.0 has a known NameError bug
+    # (nn not defined in accelerate.py). 4.46.x is stable for LLaMA inference.
     pip install --no-cache-dir \
-        "transformers>=4.40.0" \
+        "transformers>=4.40.0,<5.0.0" \
         "accelerate>=0.27.0" \
         "bitsandbytes>=0.43.0" \
-        "sentence-transformers>=2.6.0" \
+        "sentence-transformers>=2.6.0,<3.5.0" \
         "scikit-learn>=1.4.0" \
         "pandas>=2.2.0" \
         "numpy>=1.26.0" \
         "pyyaml>=6.0.1" \
         "tqdm>=4.66.0" \
         "openai>=1.23.0" \
-        "matplotlib>=3.8.0" \
+        "matplotlib>=3.8.0,<3.10.0" \
         "seaborn>=0.13.0" \
         "jsonlines>=4.0.0" \
-        "typing-extensions>=4.14.0" \
         "pytest>=8.0.0"
 
-    # Clone and install CAGE 4 simulator
-    cd /opt
-    git clone https://github.com/cage-challenge/cage-challenge-4.git
-    pip install --no-cache-dir -e /opt/cage-challenge-4/
-    # Re-pin typing-extensions in case CAGE downgraded it
-    pip install --no-cache-dir -U "typing-extensions>=4.14.0"
+    # ── Step 4: Fix typing_extensions LAST ───────────────────────────────────
+    # CAGE pins ==4.9.0, but pydantic/openai need >=4.14. Override it here.
+    # CAGE 4 functions fine with newer typing_extensions despite the pin.
+    pip install --no-cache-dir --force-reinstall "typing-extensions>=4.14.0,<5.0"
 
-    # Final verification
-    python -c "import numpy, torch, transformers, sentence_transformers; print('All imports OK')"
+    # ── Step 5: Verify all critical imports ──────────────────────────────────
+    python -c "
+import numpy, torch, transformers, sentence_transformers
+print('numpy:', numpy.__version__)
+print('torch:', torch.__version__)
+print('cuda available:', torch.cuda.is_available())
+print('transformers:', transformers.__version__)
+print('All imports OK')
+"
     python --version
 
 %runscript
