@@ -1,79 +1,123 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ==============================================================================
-# setup_hpc.sh - TacticalGuard-LLM Environment Setup for HPC
+# setup_hpc.sh - TacticalGuard-LLM environment setup for HPC
 # ==============================================================================
-# Run this script ONCE on the login node to set up your virtual environment
-# and install all required dependencies safely.
+# Run once from the project directory on the login node:
 #
-# Usage: bash setup_hpc.sh
+#   bash setup_hpc.sh
+#
+# This script does not require environment modules. If your cluster provides
+# modules, it will use them when available; otherwise it falls back to python3.
 # ==============================================================================
 
-echo "🚀 Starting TacticalGuard-LLM HPC setup..."
+set -Eeuo pipefail
 
-# 0. Load the required Python 3.10 module to guarantee environment consistency
-module purge
-module load python-3.10.8-gcc-11.2.0-dlcmq7k
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_DIR="${PROJECT_DIR}/venv_tacticalguard"
 
-# 1. Create and activate virtual environment
-VENV_DIR="venv_tacticalguard"
-if [ ! -d "$VENV_DIR" ]; then
-    echo "📦 Creating virtual environment: $VENV_DIR..."
-    python -m venv $VENV_DIR
+cd "${PROJECT_DIR}"
+
+echo "Starting TacticalGuard-LLM HPC setup"
+echo "Project directory: ${PROJECT_DIR}"
+
+load_python_module_if_available() {
+    if [ -f /etc/profile.d/modules.sh ]; then
+        # shellcheck disable=SC1091
+        source /etc/profile.d/modules.sh || true
+    elif [ -f /usr/share/Modules/init/bash ]; then
+        # shellcheck disable=SC1091
+        source /usr/share/Modules/init/bash || true
+    elif [ -f /usr/share/lmod/lmod/init/bash ]; then
+        # shellcheck disable=SC1091
+        source /usr/share/lmod/lmod/init/bash || true
+    fi
+
+    if command -v module >/dev/null 2>&1; then
+        echo "Environment modules detected; trying Python module."
+        module purge || true
+        module load python-3.10.8-gcc-11.2.0-dlcmq7k || module load python/3.10 || module load python || true
+    else
+        echo "Environment modules not available; using system Python."
+    fi
+}
+
+find_python() {
+    if command -v python3 >/dev/null 2>&1; then
+        command -v python3
+    elif command -v python >/dev/null 2>&1; then
+        command -v python
+    else
+        echo "ERROR: no python3/python command found. Load a Python module manually, then rerun." >&2
+        exit 1
+    fi
+}
+
+load_python_module_if_available
+BASE_PYTHON="$(find_python)"
+
+echo "Base Python: ${BASE_PYTHON}"
+"${BASE_PYTHON}" --version
+
+if [ ! -d "${VENV_DIR}" ]; then
+    echo "Creating virtual environment: ${VENV_DIR}"
+    "${BASE_PYTHON}" -m venv "${VENV_DIR}"
 else
-    echo "✅ Virtual environment $VENV_DIR already exists."
+    echo "Virtual environment already exists: ${VENV_DIR}"
 fi
 
-echo "🔄 Activating virtual environment..."
-source $VENV_DIR/bin/activate
+VENV_PYTHON="${VENV_DIR}/bin/python"
+VENV_PIP="${VENV_DIR}/bin/pip"
 
-# 2. Upgrade pip and core tools
-echo "⬆️ Upgrading pip..."
-$PWD/venv_tacticalguard/bin/pip install --upgrade pip setuptools wheel
-
-# 3. Fix typing-extensions (critical for pytest/CAGE4 compatibility)
-echo "🔧 Installing typing-extensions..."
-$PWD/venv_tacticalguard/bin/pip install -U "typing-extensions>=4.14.0"
-
-# 4. Install PyTorch (optimized for H100 - CUDA 12.1 is generally recommended for H100)
-# Note: Adjust the CUDA version if your cluster uses a different default CUDA module.
-echo "🔥 Installing PyTorch (CUDA 12.1)..."
-$PWD/venv_tacticalguard/bin/pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# 5. Install LLM and project dependencies
-echo "🧠 Installing HuggingFace and LLM dependencies..."
-$PWD/venv_tacticalguard/bin/pip install "transformers>=4.40.0" "accelerate>=0.27.0" "bitsandbytes>=0.43.0"
-$PWD/venv_tacticalguard/bin/pip install "sentence-transformers>=2.6.0" "scikit-learn>=1.4.0"
-$PWD/venv_tacticalguard/bin/pip install "pyyaml>=6.0.1" "tqdm>=4.66.0" "openai>=1.23.0"
-$PWD/venv_tacticalguard/bin/pip install "matplotlib>=3.8.0" "seaborn>=0.13.0" "jsonlines>=4.0.0" "pandas>=2.2.0"
-
-# 6. Install testing tools
-echo "🧪 Installing testing dependencies..."
-$PWD/venv_tacticalguard/bin/pip install pytest
-
-# 7. Install CAGE 4 Simulator
-if [ ! -d "cage-challenge-4" ]; then
-    echo "🎮 Cloning and installing CAGE 4 simulator..."
-    git clone https://github.com/cage-challenge/cage-challenge-4.git
-    $PWD/venv_tacticalguard/bin/pip install -e cage-challenge-4/
-    
-    # Re-pin typing-extensions just in case CAGE downgraded it
-    $PWD/venv_tacticalguard/bin/pip install -U "typing-extensions>=4.14.0"
-else
-    echo "✅ CAGE 4 already installed."
+if [ ! -x "${VENV_PYTHON}" ]; then
+    echo "ERROR: venv Python is missing or not executable: ${VENV_PYTHON}" >&2
+    exit 1
 fi
 
-# 8. Setup .env file for secrets if it doesn't exist
+echo "Venv Python: ${VENV_PYTHON}"
+"${VENV_PYTHON}" --version
+
+echo "Upgrading pip, setuptools, and wheel"
+"${VENV_PYTHON}" -m pip install --upgrade pip setuptools wheel
+
+echo "Installing core numeric stack first"
+"${VENV_PYTHON}" -m pip install -U "numpy>=1.26.0" "pandas>=2.2.0" "scipy" "scikit-learn>=1.4.0"
+
+echo "Installing PyTorch for CUDA 12.1/H100"
+"${VENV_PYTHON}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+echo "Installing project dependencies"
+"${VENV_PYTHON}" -m pip install -r requirements.txt
+"${VENV_PYTHON}" -m pip install -U "typing-extensions>=4.14.0" "numpy>=1.26.0" pytest
+
+echo "Checking critical imports"
+"${VENV_PYTHON}" - <<'PY'
+import sys
+print("python:", sys.executable)
+import numpy
+print("numpy:", numpy.__version__)
+import torch
+print("torch:", torch.__version__, "cuda:", torch.cuda.is_available())
+import transformers
+print("transformers:", transformers.__version__)
+import sentence_transformers
+print("sentence-transformers: ok")
+PY
+
 if [ ! -f ".env" ]; then
-    echo "🔑 Creating blank .env file for tokens..."
-    echo "HF_TOKEN=your_huggingface_token_here" > .env
-    echo "OPENAI_API_KEY=your_openai_api_key_here" >> .env
-    echo "⚠️  IMPORTANT: Please edit the .env file and add your HF_TOKEN before running jobs!"
+    cat > .env <<'EOF'
+HF_TOKEN=your_huggingface_token_here
+OPENAI_API_KEY=your_openai_api_key_here
+EOF
+    chmod 600 .env
+    echo "Created .env. Edit it and add your Hugging Face token before real LLaMA jobs."
 else
-    echo "✅ .env file already exists."
+    echo ".env already exists."
 fi
+
+mkdir -p results data logs paper/tables results/figures
 
 echo ""
-echo "🎉 Setup Complete!"
-echo "Next steps:"
-echo "1. Edit .env and paste your HuggingFace token (and optionally OpenAI key)."
-echo "2. Submit your job to the H100 nodes using: sbatch h100_job.slurm"
+echo "Setup complete."
+echo "Submit with: sbatch h100_job.slurm"
+echo "Manual sanity check:"
+echo "  ${VENV_PYTHON} -m pytest tests/ -q"
