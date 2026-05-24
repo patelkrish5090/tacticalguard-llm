@@ -34,7 +34,7 @@ except ImportError:
 
 class LocalLLM:
     """
-    LLaMA-3.1-8B-Instruct loaded with 4-bit bitsandbytes quantization.
+    LLaMA-3.1-8B-Instruct loaded natively (quantization disabled by default).
 
     Tracks total calls, token usage, and latency for paper metrics.
     """
@@ -44,7 +44,7 @@ class LocalLLM:
     def __init__(
         self,
         model_id: str = DEFAULT_MODEL_ID,
-        use_4bit: bool = True,
+        use_4bit: bool = False,
     ):
         if not TRANSFORMERS_AVAILABLE:
             raise RuntimeError(
