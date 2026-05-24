@@ -90,13 +90,16 @@ def _make_filter(defense_layers: list[str], filter_path: str = "data/filter_fitt
         return None
 
 
-def run_episode(config: dict, episode: int = 0) -> list[dict]:
+def run_episode(config: dict, episode: int = 0, shared_llm=None) -> list[dict]:
     """
     Run a single episode and return step log records.
 
     config keys:
         env_seed, attack_type, defense_layers (list), agent_model,
         n_steps, log_path (optional)
+
+    shared_llm: if provided, reuse this LLM instance instead of loading a new one.
+                Pass this from run_all_experiments.py to avoid reloading on every episode.
     """
     from src.env.cage4_wrapper import make_env
     from src.env.action_space import parse_llm_output
@@ -113,8 +116,11 @@ def run_episode(config: dict, episode: int = 0) -> list[dict]:
     # Init env
     env = make_env(max_steps=n_steps, seed=env_seed)
 
-    # Init LLM
-    llm = make_llm(model_type=agent_model, seed=env_seed)
+    # Init LLM — reuse shared instance if provided, otherwise load fresh
+    if shared_llm is not None:
+        llm = shared_llm
+    else:
+        llm = make_llm(model_type=agent_model, seed=env_seed)
 
     # Init filter (needed before attacker for white-box adaptive)
     filt = _make_filter(defense_layers, filter_path)

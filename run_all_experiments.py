@@ -88,6 +88,7 @@ def run_condition(
     config: dict,
     n_episodes: int,
     output_dir: str,
+    shared_llm=None,
 ) -> dict:
     """Run a single experimental condition and return metrics."""
     from src.run_experiment import run_episode
@@ -111,7 +112,7 @@ def run_condition(
         config_ep = dict(config)
         config_ep["env_seed"] = ep
         try:
-            logs = run_episode(config_ep, episode=ep)
+            logs = run_episode(config_ep, episode=ep, shared_llm=shared_llm)
             all_logs.extend(logs)
         except Exception as e:
             logger.error(f"Episode {ep} failed: {e}")
@@ -223,14 +224,26 @@ def main():
             skipped.append(cond_key)
             continue
 
+        # Pre-load the LLM ONCE per condition (not once per episode!)
+        # This avoids reloading the 8B model 50 times.
+        agent_model_type = config.get("agent_model", "mock")
+        shared_llm = None
+        if agent_model_type not in ("mock", "openai_llm"):
+            from src.llm_backend.local_llm import make_llm
+            print(f"\nPre-loading LLM once for condition {cond_key} ({agent_model_type})...")
+            shared_llm = make_llm(model_type=agent_model_type)
+            print("LLM ready. Starting episodes...")
+
         try:
             metrics = run_condition(
-                cond_key, config, args.n_episodes, args.output_dir
+                cond_key, config, args.n_episodes, args.output_dir,
+                shared_llm=shared_llm,
             )
             all_results[cond_key] = metrics
         except Exception as e:
             logger.error(f"Condition {cond_key} failed: {e}", exc_info=True)
             skipped.append(cond_key)
+
 
     if not all_results:
         print("No conditions completed successfully.")
