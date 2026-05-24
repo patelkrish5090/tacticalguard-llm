@@ -45,26 +45,26 @@ echo "✅ Environment ready. Running Pytest..."
 mkdir -p results data logs paper/tables results/figures
 
 # Step A: Run tests to verify setup
-python -m pytest tests/ -v --tb=short
+$PWD/venv_tacticalguard/bin/python -m pytest tests/ -v --tb=short
 
 # Step B: Generate clean data and fit anomaly filter
 echo "📊 Generating clean data and fitting filter..."
-python scripts/generate_clean_data.py --n_episodes 200 --n_steps 50
+$PWD/venv_tacticalguard/bin/python scripts/generate_clean_data.py --n_episodes 200 --n_steps 50
 
 # Step C: Run the experiments
 # Depending on how long you want to run, adjust --n_episodes (10 for test, 50 for paper)
 echo "🔬 Running Full Experiments (Conditions A-E)..."
-python run_all_experiments.py --n_episodes 50 --conditions A B C D E --skip_openai
+$PWD/venv_tacticalguard/bin/python run_all_experiments.py --n_episodes 50 --conditions A B C D E --skip_openai --agent_model local_llm
 
 # Step D: (Optional) Condition F with OpenAI
 if [ -n "$OPENAI_API_KEY" ] && [ "$OPENAI_API_KEY" != "your_openai_api_key_here" ]; then
     echo "🔬 Running OpenAI Cross-model Experiment (Condition F)..."
-    python run_all_experiments.py --n_episodes 50 --conditions F
+    $PWD/venv_tacticalguard/bin/python run_all_experiments.py --n_episodes 50 --conditions F
 fi
 
 # Step E: Generate Plots
 echo "📈 Generating analysis plots..."
-python notebooks/analysis.py
+$PWD/venv_tacticalguard/bin/python notebooks/analysis.py
 
 echo "🎉 All Done!"
 date
