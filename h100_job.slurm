@@ -22,49 +22,30 @@ date
 PROJECT_DIR="${SLURM_SUBMIT_DIR:-$(pwd)}"
 cd "${PROJECT_DIR}"
 
-VENV_DIR="${PROJECT_DIR}/venv_tacticalguard"
-PYTHON="${VENV_DIR}/bin/python"
-PIP="${VENV_DIR}/bin/pip"
+SIF="${PROJECT_DIR}/tacticalguard.sif"
 
-if [ ! -x "${PYTHON}" ]; then
-    echo "ERROR: venv Python not found or not executable: ${PYTHON}" >&2
-    echo "Run this first on the login node: bash setup_hpc.sh" >&2
-    echo "Project directory seen by job: ${PROJECT_DIR}" >&2
-    ls -la "${PROJECT_DIR}" >&2
+# Verify the container image exists
+if [ ! -f "${SIF}" ]; then
+    echo "ERROR: Container image not found: ${SIF}" >&2
+    echo "Run this first on the login node: bash build_container.sh" >&2
     exit 1
 fi
 
-# Do not depend on shell activation or module initialization. Put the venv first
-# so subprocesses that call python/pip still resolve to this environment.
-export VIRTUAL_ENV="${VENV_DIR}"
-export PATH="${VENV_DIR}/bin:${PATH:-}"
-export PYTHONNOUSERSITE=1
-export TOKENIZERS_PARALLELISM=false
+# Cache directories (inside project so they persist across jobs)
 export HF_HOME="${PROJECT_DIR}/.hf_cache"
 export TRANSFORMERS_CACHE="${HF_HOME}/transformers"
 export SENTENCE_TRANSFORMERS_HOME="${HF_HOME}/sentence_transformers"
 
 mkdir -p results data logs paper/tables results/figures "${HF_HOME}"
 
-echo "Project directory: ${PROJECT_DIR}"
-echo "Python: ${PYTHON}"
-"${PYTHON}" --version
-which python || true
-
-if command -v nvidia-smi >/dev/null 2>&1; then
-    nvidia-smi
-else
-    echo "WARNING: nvidia-smi not found in PATH"
-fi
-
+# Load secrets from .env
 if [ -f ".env" ]; then
     echo "Loading environment variables from .env"
     set -a
-    # shellcheck disable=SC1091
     source .env
     set +a
 else
-    echo "ERROR: .env file not found. Run setup_hpc.sh and add HF_TOKEN." >&2
+    echo "ERROR: .env file not found. Add your HF_TOKEN to a .env file." >&2
     exit 1
 fi
 
@@ -73,44 +54,64 @@ if [ -z "${HF_TOKEN:-}" ] || [ "${HF_TOKEN}" = "your_huggingface_token_here" ]; 
     exit 1
 fi
 
-echo "Verifying Python environment"
-"${PYTHON}" - <<'PY'
-import sys
-print("executable:", sys.executable)
-import numpy
-print("numpy:", numpy.__version__)
-import torch
-print("torch:", torch.__version__)
-print("cuda available:", torch.cuda.is_available())
+# Helper: run a command inside the container with GPU passthrough
+# --nv            : passes H100 GPU into the container
+# --bind          : mounts project dir to /workspace inside container
+# --env           : passes secrets into the container environment
+APPTAINER_RUN="apptainer exec \
+    --nv \
+    --bind ${PROJECT_DIR}:/workspace \
+    --env HF_TOKEN=${HF_TOKEN} \
+    --env OPENAI_API_KEY=${OPENAI_API_KEY:-} \
+    --env HF_HOME=/workspace/.hf_cache \
+    --env TRANSFORMERS_CACHE=/workspace/.hf_cache/transformers \
+    --env TOKENIZERS_PARALLELISM=false \
+    --env PYTHONUNBUFFERED=1 \
+    --pwd /workspace \
+    ${SIF}"
+
+# Verify container + GPU
+echo "Verifying container environment"
+${APPTAINER_RUN} python -c "
+import sys, numpy, torch, transformers
+print('python:', sys.version)
+print('numpy:', numpy.__version__)
+print('torch:', torch.__version__)
+print('cuda available:', torch.cuda.is_available())
 if torch.cuda.is_available():
-    print("gpu:", torch.cuda.get_device_name(0))
-import transformers
-print("transformers:", transformers.__version__)
-PY
+    print('GPU:', torch.cuda.get_device_name(0))
+    print('VRAM:', round(torch.cuda.get_device_properties(0).total_memory / 1e9, 1), 'GB')
+print('transformers:', transformers.__version__)
+"
 
+# Step A: Run tests
 echo "Running tests"
-"${PYTHON}" -u -m pytest tests/ -v --tb=short
+${APPTAINER_RUN} python -u -m pytest tests/ -v --tb=short
 
+# Step B: Generate clean data and fit anomaly filter
 echo "Generating clean data and fitting anomaly filter"
-"${PYTHON}" -u scripts/generate_clean_data.py --n_episodes 200 --n_steps 50
+${APPTAINER_RUN} python -u scripts/generate_clean_data.py --n_episodes 200 --n_steps 50
 
+# Step C: Run experiments A-E with local LLaMA
 echo "Running experiments A-E with local LLaMA"
-"${PYTHON}" -u run_all_experiments.py \
+${APPTAINER_RUN} python -u run_all_experiments.py \
     --n_episodes 50 \
     --conditions A B C D E \
     --skip_openai \
     --agent_model local_llm \
     --n_steps 100
 
+# Step D: (Optional) Condition F with OpenAI
 if [ -n "${OPENAI_API_KEY:-}" ] && [ "${OPENAI_API_KEY}" != "your_openai_api_key_here" ]; then
     echo "Running OpenAI condition F"
-    "${PYTHON}" -u run_all_experiments.py --n_episodes 50 --conditions F
+    ${APPTAINER_RUN} python -u run_all_experiments.py --n_episodes 50 --conditions F
 else
-    echo "Skipping condition F because OPENAI_API_KEY is not set"
+    echo "Skipping condition F (OPENAI_API_KEY not set)"
 fi
 
+# Step E: Generate analysis plots
 echo "Generating analysis plots"
-"${PYTHON}" -u notebooks/analysis.py
+${APPTAINER_RUN} python -u notebooks/analysis.py
 
 echo "Job complete"
 date

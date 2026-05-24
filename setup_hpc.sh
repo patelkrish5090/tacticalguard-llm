@@ -80,7 +80,8 @@ echo "Upgrading pip, setuptools, and wheel"
 "${VENV_PYTHON}" -m pip install --upgrade pip setuptools wheel
 
 echo "Installing core numeric stack first"
-"${VENV_PYTHON}" -m pip install -U "numpy>=1.26.0" "pandas>=2.2.0" "scipy" "scikit-learn>=1.4.0"
+"${VENV_PYTHON}" -m pip install --no-cache-dir --force-reinstall "numpy>=1.26.0"
+"${VENV_PYTHON}" -m pip install --no-cache-dir -U "pandas>=2.2.0" "scipy" "scikit-learn>=1.4.0"
 
 echo "Installing PyTorch for CUDA 12.1/H100"
 "${VENV_PYTHON}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
@@ -88,6 +89,7 @@ echo "Installing PyTorch for CUDA 12.1/H100"
 echo "Installing project dependencies"
 "${VENV_PYTHON}" -m pip install -r requirements.txt
 "${VENV_PYTHON}" -m pip install -U "typing-extensions>=4.14.0" "numpy>=1.26.0" pytest
+"${VENV_PYTHON}" -m pip check || true
 
 echo "Checking critical imports"
 "${VENV_PYTHON}" - <<'PY'
