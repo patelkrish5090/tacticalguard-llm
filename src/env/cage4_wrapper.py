@@ -73,7 +73,13 @@ class CAGE4Wrapper:
         if self._use_mock:
             return self._mock.reset()
         self._step_count = 0
-        obs, _ = self.env.reset()
+        result = self.env.reset()
+        if hasattr(result, "observation"):
+            obs = result.observation
+        elif isinstance(result, tuple):
+            obs = result[0]
+        else:
+            obs = result
         self._last_obs = obs
         return obs
 
@@ -81,8 +87,18 @@ class CAGE4Wrapper:
         if self._use_mock:
             return self._mock.step(actions)
         self._step_count += 1
-        obs, rew, term, trunc, info = self.env.step(actions)
-        done = term or trunc or self._step_count >= self.max_steps
+        result = self.env.step(actions)
+        
+        if hasattr(result, "observation"):
+            obs = result.observation
+            rew = result.reward
+            done = result.done
+            info = getattr(result, "info", {})
+        else:
+            obs, rew, term, trunc, info = result
+            done = term or trunc
+            
+        done = done or self._step_count >= self.max_steps
         self._last_obs = obs
         return obs, rew, done, info
 
