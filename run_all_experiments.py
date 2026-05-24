@@ -87,12 +87,17 @@ CONDITION_CONFIGS = {
 }
 
 
-def run_all(n_episodes: int = 3, output_dir: str = "results/"):
+def run_all(n_episodes: int = 3, output_dir: str = "results/", real_env: bool = False):
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs("logs", exist_ok=True)
 
     all_results = {}
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Override use_mock if real_env is requested
+    if real_env:
+        for cond_key in CONDITION_CONFIGS:
+            CONDITION_CONFIGS[cond_key]["use_mock"] = False
 
     print(f"\n{'='*70}")
     print(f"TacticalGuard-LLM: Running All 6 Conditions ({n_episodes} episodes each)")
@@ -179,9 +184,11 @@ def main():
     parser.add_argument("--n_episodes", type=int, default=3,
                         help="Episodes per condition (3=smoke test, 50=full)")
     parser.add_argument("--output_dir", default="results/")
+    parser.add_argument("--real_env", action="store_true",
+                        help="Force use_mock=False to use real CAGE 4 environment")
     args = parser.parse_args()
 
-    results = run_all(n_episodes=args.n_episodes, output_dir=args.output_dir)
+    results = run_all(n_episodes=args.n_episodes, output_dir=args.output_dir, real_env=args.real_env)
     return results
 
 

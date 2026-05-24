@@ -113,7 +113,7 @@ class MockCAGE4Wrapper:
     """
 
     def __init__(self, max_steps: int = 100, seed: int = 42):
-        print("[MockCAGE4Wrapper] CAGE 4 not available — using mock environment.")
+        print("[MockCAGE4Wrapper] Using mock environment.")
         self.max_steps = max_steps
         self.seed = seed
         self._rng = random.Random(seed)
