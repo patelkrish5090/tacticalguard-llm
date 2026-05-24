@@ -87,20 +87,34 @@ class CAGE4Wrapper:
         if self._use_mock:
             return self._mock.step(actions)
         self._step_count += 1
-        result = self.env.step(actions)
+        all_obs = {}
+        all_rew = {}
+        done = False
+        info = {}
         
-        if hasattr(result, "observation"):
-            obs = result.observation
-            rew = result.reward
-            done = result.done
-            info = getattr(result, "info", {})
-        else:
-            obs, rew, term, trunc, info = result
-            done = term or trunc
-            
+        for agent_id, action_str in actions.items():
+            try:
+                # CybORG v4 step signature: step(agent: str, action: Action)
+                result = self.env.step(agent=agent_id, action=action_str)
+            except Exception as e:
+                # If raw CybORG doesn't accept string actions, fallback to None (Sleep)
+                result = self.env.step(agent=agent_id, action=None)
+                
+            if hasattr(result, "observation"):
+                all_obs[agent_id] = result.observation
+                all_rew[agent_id] = result.reward
+                done = done or result.done
+                info.update(getattr(result, "info", {}))
+            else:
+                o, r, term, trunc, i = result
+                all_obs[agent_id] = o
+                all_rew[agent_id] = r
+                done = done or term or trunc
+                info.update(i)
+                
         done = done or self._step_count >= self.max_steps
-        self._last_obs = obs
-        return obs, rew, done, info
+        self._last_obs = all_obs
+        return all_obs, all_rew, done, info
 
     def get_agent_ids(self) -> List[str]:
         if self._use_mock:

@@ -11,3 +11,4 @@ logs/
 results/*.jsonl
 *.pkl
 .DS_Store
+TacticalGuard_LLM.ipynb
