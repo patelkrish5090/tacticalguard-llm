@@ -17,6 +17,8 @@ echo "Node: $SLURMD_NODENAME"
 echo "Job ID: $SLURM_JOB_ID"
 date
 
+source /etc/profile.d/modules.sh
+
 # 1. Load the exact same Python 3.10 module used during setup
 module purge
 module load python-3.10.8-gcc-11.2.0-dlcmq7k
