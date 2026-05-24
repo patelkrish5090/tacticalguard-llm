@@ -108,7 +108,7 @@ class LocalLLM:
 
     def __init__(
         self,
-        model_id: str = "meta-llama/Llama-3.1-8B-Instruct",
+        model_id: str = "Qwen/Qwen2.5-7B-Instruct",
         use_4bit: bool = True,
         fallback_to_mock: bool = True,
         seed: int = 42,
