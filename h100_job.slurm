@@ -7,14 +7,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G                 # Requesting 64GB RAM (Node has 1TB)
 #SBATCH --time=24:00:00           # Max time for full paper runs
-#
-# ===== TARGETING H100 NODES =====
-# Based on cluster specs: gpu[5-6] have 4x H100 SXM5 80GB
-# 1. Use partition if your cluster requires it (check with 'sinfo | grep gpu')
-# Example: #SBATCH --partition=gpu_h100_4
-# 
-# 2. Or, restrict by node list if you know the exact names:
-#SBATCH --nodelist=gpu[5-6]       # Target the H100 nodes specifically
+# 1. Targeting the H100 partition
+#SBATCH --partition=gpu_h100_4    
 #SBATCH --gres=gpu:1              # Request 1 GPU
 
 # ==============================================================================
