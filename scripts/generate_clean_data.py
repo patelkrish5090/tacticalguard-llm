@@ -40,12 +40,12 @@ logger = logging.getLogger(__name__)
 
 def generate_poisoned_samples(n_samples: int = 200) -> list[str]:
     """Generate sample poisoned observations for threshold tuning validation."""
-    from src.env.cage4_wrapper import MockCAGE4Wrapper
+    from src.env.cage4_wrapper import make_env
     from src.attacks.observation_poison import ObservationPoisoner
     from src.attacks.prompt_inject import PromptInjector
     from src.attacks.comm_poison import CommPoisoner
 
-    env = MockCAGE4Wrapper(max_steps=50, seed=9999)
+    env = make_env(max_steps=50, seed=9999, use_real_cage=True)
     attackers = [
         ObservationPoisoner(compromise_prob=0.6, false_clear_prob=0.3, seed=101),
         PromptInjector(seed=102),
@@ -89,11 +89,11 @@ def main():
     # ── Step 1: Generate clean observations ──────────────────────────────────
     logger.info(f"Generating {args.n_episodes} clean episodes…")
 
-    from src.env.cage4_wrapper import MockCAGE4Wrapper
+    from src.env.cage4_wrapper import make_env
 
     clean_obs: list[str] = []
     for ep in range(args.n_episodes):
-        env = MockCAGE4Wrapper(max_steps=args.n_steps, seed=ep)
+        env = make_env(max_steps=args.n_steps, seed=ep, use_real_cage=True)
         obs = env.reset()
         for step in range(args.n_steps):
             for agent_id in env.get_agent_ids():
