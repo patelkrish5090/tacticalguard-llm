@@ -21,14 +21,27 @@ logger = logging.getLogger(__name__)
 
 REAL_CAGE_AVAILABLE = False
 try:
+    # Apptainer sets /workspace, or it might be in the current directory
+    import sys
+    import os
+    possible_paths = [
+        "/opt/cage-challenge-4",
+        "/workspace/cage-challenge-4",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../cage-challenge-4")),
+        os.path.abspath("cage-challenge-4")
+    ]
+    for p in possible_paths:
+        if os.path.exists(p) and p not in sys.path:
+            sys.path.insert(0, p)
+            
     from CybORG import CybORG
     from CybORG.Simulator.Scenarios import EnterpriseScenarioGenerator
     from CybORG.Agents import SleepAgent, EnterpriseGreenAgent, FiniteStateRedAgent
     REAL_CAGE_AVAILABLE = True
     logger.info("[CAGE4] Real CybORG simulator found and will be used.")
-except ImportError:
+except ImportError as e:
     logger.warning(
-        "[CAGE4] CybORG not found. Falling back to MockCAGE4Wrapper. "
+        f"[CAGE4] CybORG not found ({e}). Falling back to MockCAGE4Wrapper. "
         "Install from: https://github.com/cage-challenge/cage-challenge-4"
     )
 
