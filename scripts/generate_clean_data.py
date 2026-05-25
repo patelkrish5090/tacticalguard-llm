@@ -45,7 +45,7 @@ def generate_poisoned_samples(n_samples: int = 200) -> list[str]:
     from src.attacks.prompt_inject import PromptInjector
     from src.attacks.comm_poison import CommPoisoner
 
-    env = make_env(max_steps=50, seed=9999, use_real_cage=True)
+    env = make_env(max_steps=50, seed=9999)
     attackers = [
         ObservationPoisoner(compromise_prob=0.6, false_clear_prob=0.3, seed=101),
         PromptInjector(seed=102),
@@ -93,7 +93,7 @@ def main():
 
     clean_obs: list[str] = []
     for ep in range(args.n_episodes):
-        env = make_env(max_steps=args.n_steps, seed=ep, use_real_cage=True)
+        env = make_env(max_steps=args.n_steps, seed=ep)
         obs = env.reset()
         for step in range(args.n_steps):
             for agent_id in env.get_agent_ids():
