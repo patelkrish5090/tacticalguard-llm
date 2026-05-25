@@ -87,7 +87,7 @@ class RealCAGE4Wrapper:
             blue_agent_class=SleepAgent,       # Blue logic driven externally by LLM
             green_agent_class=EnterpriseGreenAgent,
             red_agent_class=FiniteStateRedAgent,
-            steps=self.max_steps,
+            steps=self.max_steps + 1,
         )
         self._cyborg = CybORG(scenario_generator=sg, seed=self.seed)
 
