@@ -1,75 +1,65 @@
 """CAGE 4 environment wrapper for TacticalGuard-LLM.
 
-Provides a unified interface regardless of whether the real CybORG simulator
-is available. The real CAGE 4 is used when installed (inside the Apptainer
-container). Falls back to MockCAGE4Wrapper for local dev / Colab runs.
+Uses the real CybORG CAGE 4 simulator exclusively. CybORG must be installed
+(present in the cage-challenge-4/ directory or on sys.path) for this to work.
+Run inside the Apptainer container which has it pre-installed.
 """
 
 from __future__ import annotations
 
 import logging
-import random
-import re
-from copy import deepcopy
+import os
+import sys
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Real CAGE 4 (CybORG) Wrapper
+# Locate and import CybORG — REQUIRED, no fallback
 # ──────────────────────────────────────────────────────────────────────────────
 
-REAL_CAGE_AVAILABLE = False
+_possible_paths = [
+    "/opt/cage-challenge-4",
+    "/workspace/cage-challenge-4",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../cage-challenge-4")),
+    os.path.abspath("cage-challenge-4"),
+]
+for _p in _possible_paths:
+    if os.path.exists(_p) and _p not in sys.path:
+        sys.path.insert(0, _p)
+        logger.info(f"[CAGE4] Added CybORG path: {_p}")
+
 try:
-    # Apptainer sets /workspace, or it might be in the current directory
-    import sys
-    import os
-    possible_paths = [
-        "/opt/cage-challenge-4",
-        "/workspace/cage-challenge-4",
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../cage-challenge-4")),
-        os.path.abspath("cage-challenge-4")
-    ]
-    for p in possible_paths:
-        if os.path.exists(p) and p not in sys.path:
-            sys.path.insert(0, p)
-            
     from CybORG import CybORG
     from CybORG.Simulator.Scenarios import EnterpriseScenarioGenerator
     from CybORG.Agents import SleepAgent, EnterpriseGreenAgent, FiniteStateRedAgent
     REAL_CAGE_AVAILABLE = True
-    logger.info("[CAGE4] Real CybORG simulator found and will be used.")
-except ImportError as e:
-    logger.warning(
-        f"[CAGE4] CybORG not found ({e}). Falling back to MockCAGE4Wrapper. "
-        "Install from: https://github.com/cage-challenge/cage-challenge-4"
-    )
+    logger.info("[CAGE4] CybORG CAGE 4 successfully imported.")
+except ImportError as _e:
+    raise RuntimeError(
+        f"[CAGE4] FATAL: Could not import CybORG ({_e}).\n"
+        "Ensure you are running inside the Apptainer container and that\n"
+        "cage-challenge-4/ is present in the project directory.\n"
+        "Install: git clone https://github.com/cage-challenge/cage-challenge-4\n"
+        "         pip install -e cage-challenge-4/"
+    ) from _e
 
 
-class RealCAGE4Wrapper:
+# ──────────────────────────────────────────────────────────────────────────────
+# Real CAGE 4 Wrapper
+# ──────────────────────────────────────────────────────────────────────────────
+
+class CAGE4Wrapper:
     """
-    Wraps the real CybORG CAGE 4 simulator with the same interface used by the
-    TacticalGuard-LLM benchmark (reset, step, get_agent_ids, format_observation,
-    get_host_status).
+    Wraps the real CybORG CAGE 4 simulator for TacticalGuard-LLM.
 
-    CAGE 4 has 5 Blue agents defending 3 network zones:
-      - blue_agent_0: Restricted Zone A
-      - blue_agent_1: Restricted Zone B
-      - blue_agent_2: Operational Zone A
-      - blue_agent_3: Operational Zone B
-      - blue_agent_4: Contractor Network / Public Access
+    CAGE 4 network topology:
+      - blue_agent_0 : Restricted Zone A
+      - blue_agent_1 : Restricted Zone B
+      - blue_agent_2 : Operational Zone A
+      - blue_agent_3 : Operational Zone B
+      - blue_agent_4 : Contractor Network / Public Access
     """
-
-    # Maps CAGE 4 action class names to the LLM action strings we use
-    _LLM_TO_CAGE_ACTION: dict[str, str] = {
-        "Monitor":       "Monitor",
-        "Analyse":       "Analyse",
-        "Remove":        "Remove",
-        "Restore":       "Restore",
-        "DeployDecoy":   "DeployDecoy",
-        "BlockTraffic":  "BlockTrafficZone",
-        "AllowTraffic":  "AllowTrafficZone",
-    }
 
     def __init__(self, max_steps: int = 100, seed: int = 42):
         self.max_steps = max_steps
@@ -84,24 +74,23 @@ class RealCAGE4Wrapper:
     def _build_env(self) -> None:
         """Instantiate a fresh CybORG environment."""
         sg = EnterpriseScenarioGenerator(
-            blue_agent_class=SleepAgent,       # Blue logic driven externally by LLM
+            blue_agent_class=SleepAgent,
             green_agent_class=EnterpriseGreenAgent,
             red_agent_class=FiniteStateRedAgent,
-            steps=self.max_steps + 1,
+            steps=self.max_steps + 1,  # +1 avoids internal CybORG off-by-one crash
         )
         self._cyborg = CybORG(scenario_generator=sg, seed=self.seed)
-
-        # Discover blue agent names from the environment
         self._agent_ids = [
             a for a in self._cyborg.agents if a.startswith("blue_agent")
         ]
         if not self._agent_ids:
-            # Fallback: standard CC4 naming
             self._agent_ids = [f"blue_agent_{i}" for i in range(5)]
+        logger.info(f"[CAGE4] Environment built. Agents: {self._agent_ids}")
 
     def reset(self) -> dict[str, dict[str, Any]]:
+        """Reset the environment for a new episode."""
         self._step_count = 0
-        self._build_env()   # fresh scenario per episode (new seed applied below)
+        self._build_env()
         obs = {}
         for agent_id in self._agent_ids:
             result = self._cyborg.reset(agent=agent_id)
@@ -118,15 +107,19 @@ class RealCAGE4Wrapper:
 
     def step(self, actions: dict[str, str]) -> tuple:
         """
-        actions: {agent_id: action_string} where action_string is one of
-                 BLUE_ACTIONS (Monitor, Analyse, Remove, Restore, DeployDecoy,
-                 BlockTraffic, AllowTraffic).
-        Returns: (obs, rewards, done, info)  — same interface as MockCAGE4Wrapper.
+        Step the environment.
+
+        Args:
+            actions: {agent_id: action_str} where action_str is one of:
+                     Monitor, Analyse, Remove, Restore, DeployDecoy,
+                     BlockTraffic, AllowTraffic
+
+        Returns:
+            (obs, rewards, done, info)
         """
         rewards: dict[str, float] = {}
 
         for agent_id, action_str in actions.items():
-            # Translate LLM action string to CybORG action object
             cage_action = self._make_cage_action(agent_id, action_str)
             result = self._cyborg.step(agent=agent_id, action=cage_action)
             rewards[agent_id] = float(result.reward) if result.reward is not None else 0.0
@@ -136,12 +129,11 @@ class RealCAGE4Wrapper:
         self._refresh_host_status()
 
         done = self._step_count >= self.max_steps
-        obs = dict(self._last_obs)
         info = {"host_status": self.get_host_status()}
-        return obs, rewards, done, info
+        return dict(self._last_obs), rewards, done, info
 
     def format_observation(self, agent_id: str, obs: dict[str, Any]) -> str:
-        """Format the raw observation dict into a natural-language prompt."""
+        """Format the raw observation dict into a natural-language LLM prompt."""
         lines = [
             "=== CAGE 4 Network Status Report ===",
             f"Agent: {agent_id} | Step: {obs.get('step', self._step_count)} | "
@@ -176,7 +168,6 @@ class RealCAGE4Wrapper:
             for m in messages[:3]:
                 lines.append(f"  {m}")
 
-        # Summary hint
         compromised = [h["name"] for h in hosts if h.get("status") in ("Compromised", "COMPROMISED")]
         if compromised:
             lines.append(f"\n[!] COMPROMISED hosts detected: {', '.join(compromised)}")
@@ -190,11 +181,15 @@ class RealCAGE4Wrapper:
 
     def _parse_observation(self, agent_id: str, result: Any) -> dict[str, Any]:
         """Convert a raw CybORG result object into a serialisable dict."""
-        obs: dict[str, Any] = {"step": self._step_count, "hosts": [], "sessions": [], "messages": []}
-
+        obs: dict[str, Any] = {
+            "step": self._step_count,
+            "hosts": [],
+            "sessions": [],
+            "messages": [],
+        }
         try:
             raw = result.observation if hasattr(result, "observation") else {}
-            if raw is None:
+            if not raw:
                 return obs
 
             for key, val in raw.items():
@@ -208,68 +203,69 @@ class RealCAGE4Wrapper:
                 if not isinstance(val, dict):
                     continue
 
-                # Host entries typically contain "System info" or "Processes"
                 system_info = val.get("System info", {})
-                if system_info or "Processes" in val or "Sessions" in val:
-                    host_name = system_info.get("Hostname", key)
-                    status = "Operational"
+                if not (system_info or "Processes" in val or "Sessions" in val):
+                    continue
 
-                    sessions = val.get("Sessions", [])
-                    if isinstance(sessions, list):
-                        for sess in sessions:
-                            if isinstance(sess, dict):
-                                agent_type = sess.get("Type", "")
-                                if "red" in str(agent_type).lower() or \
-                                   "exploit" in str(agent_type).lower() or \
-                                   sess.get("Username", "") == "root":
-                                    status = "COMPROMISED"
+                host_name = system_info.get("Hostname", key) if isinstance(system_info, dict) else key
+                status = "Operational"
 
-                    processes = val.get("Processes", [])
-                    proc_names = []
-                    if isinstance(processes, list):
-                        for p in processes[:5]:
-                            if isinstance(p, dict):
-                                pname = p.get("Process Name", "")
-                                if pname:
-                                    proc_names.append(str(pname))
-
-                    interfaces = val.get("Interface", [])
-                    connections = []
-                    if isinstance(interfaces, list):
-                        for iface in interfaces[:4]:
-                            if isinstance(iface, dict):
-                                ip = iface.get("IP Address", "")
-                                subnet = iface.get("Subnet", "")
-                                if ip:
-                                    connections.append(f"IP:{ip}")
-                                if subnet and not obs.get("zone"):
-                                    obs["zone"] = str(subnet)
-
-                    obs["hosts"].append({
-                        "name": host_name,
-                        "status": status,
-                        "subnet": obs.get("zone", "unknown"),
-                        "processes": proc_names,
-                        "connections": connections,
-                    })
-
-                    for sess in (sessions if isinstance(sessions, list) else []):
+                sessions = val.get("Sessions", [])
+                if isinstance(sessions, list):
+                    for sess in sessions:
                         if isinstance(sess, dict):
-                            s_type = sess.get("Type", "")
-                            s_user = sess.get("Username", "")
-                            if s_type or s_user:
-                                obs["sessions"].append(f"{host_name}: {s_user}@{s_type}")
+                            agent_type = str(sess.get("Type", ""))
+                            username = str(sess.get("Username", ""))
+                            if "red" in agent_type.lower() or "exploit" in agent_type.lower() or username == "root":
+                                status = "COMPROMISED"
+
+                processes = val.get("Processes", [])
+                proc_names = []
+                if isinstance(processes, list):
+                    for p in processes[:5]:
+                        if isinstance(p, dict):
+                            pname = p.get("Process Name", "")
+                            if pname:
+                                proc_names.append(str(pname))
+
+                interfaces = val.get("Interface", [])
+                connections = []
+                if isinstance(interfaces, list):
+                    for iface in interfaces[:4]:
+                        if isinstance(iface, dict):
+                            ip = iface.get("IP Address", "")
+                            subnet = iface.get("Subnet", "")
+                            if ip:
+                                connections.append(f"IP:{ip}")
+                            if subnet and not obs.get("zone"):
+                                obs["zone"] = str(subnet)
+
+                obs["hosts"].append({
+                    "name": host_name,
+                    "status": status,
+                    "subnet": obs.get("zone", "unknown"),
+                    "processes": proc_names,
+                    "connections": connections,
+                })
+
+                for sess in (sessions if isinstance(sessions, list) else []):
+                    if isinstance(sess, dict):
+                        s_type = sess.get("Type", "")
+                        s_user = sess.get("Username", "")
+                        if s_type or s_user:
+                            obs["sessions"].append(f"{host_name}: {s_user}@{s_type}")
+
         except Exception as e:
             logger.warning(f"[CAGE4] Observation parse error for {agent_id}: {e}")
 
         return obs
 
     def _make_cage_action(self, agent_id: str, action_str: str) -> Any:
-        """Convert an LLM action string to a CybORG action object."""
+        """Convert an LLM action string to a real CybORG action object."""
         from CybORG.Simulator.Actions.AbstractActions import Monitor, Analyse, Remove, Restore
         from CybORG.Simulator.Actions.ConcreteActions.DecoyActions import DeployDecoy
         from CybORG.Simulator.Actions.ConcreteActions.ControlTraffic import (
-            AllowTrafficZone, BlockTrafficZone
+            AllowTrafficZone, BlockTrafficZone,
         )
         from CybORG.Simulator.Actions.Action import Sleep
 
@@ -285,7 +281,6 @@ class RealCAGE4Wrapper:
 
         action_class = action_map.get(action_str, Monitor)
         try:
-            # Most Blue actions in CC4 take session + agent kwargs
             return action_class(session=0, agent=agent_id)
         except TypeError:
             try:
@@ -297,162 +292,47 @@ class RealCAGE4Wrapper:
         """Pull ground-truth host status from CybORG's true state."""
         self._host_status = {}
         try:
-            # TrueStateWrapper provides ground truth if available
-            true_state = self._cyborg.get_agent_state("True") if hasattr(self._cyborg, "get_agent_state") else {}
-            if isinstance(true_state, dict):
-                for host_key, host_data in true_state.items():
-                    if not isinstance(host_data, dict):
-                        continue
-                    sessions = host_data.get("Sessions", [])
-                    status = "Operational"
-                    if isinstance(sessions, list):
-                        for sess in sessions:
-                            if isinstance(sess, dict):
-                                t = str(sess.get("Type", ""))
-                                u = str(sess.get("Username", ""))
-                                if "red" in t.lower() or u == "root":
-                                    status = "COMPROMISED"
-                                    break
-                    sys_info = host_data.get("System info", {})
-                    name = sys_info.get("Hostname", host_key) if isinstance(sys_info, dict) else host_key
-                    self._host_status[name] = status
+            true_state = (
+                self._cyborg.get_agent_state("True")
+                if hasattr(self._cyborg, "get_agent_state")
+                else {}
+            )
+            if not isinstance(true_state, dict):
+                return
+            for host_key, host_data in true_state.items():
+                if not isinstance(host_data, dict):
+                    continue
+                sessions = host_data.get("Sessions", [])
+                status = "Operational"
+                if isinstance(sessions, list):
+                    for sess in sessions:
+                        if isinstance(sess, dict):
+                            t = str(sess.get("Type", ""))
+                            u = str(sess.get("Username", ""))
+                            if "red" in t.lower() or u == "root":
+                                status = "COMPROMISED"
+                                break
+                sys_info = host_data.get("System info", {})
+                name = sys_info.get("Hostname", host_key) if isinstance(sys_info, dict) else host_key
+                self._host_status[name] = status
         except Exception as e:
             logger.debug(f"[CAGE4] Could not refresh true host status: {e}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Mock CAGE 4 Wrapper (fallback for Colab / local dev)
+# Factory
 # ──────────────────────────────────────────────────────────────────────────────
 
-class MockCAGE4Wrapper:
-    """Small deterministic cyber-defense environment used for local dev and tests."""
-
-    AGENTS = ["blue_agent_0", "blue_agent_1"]
-    HOSTS = ["Enterprise0", "Enterprise1", "Enterprise2", "OpServer0"]
-
-    def __init__(self, max_steps: int = 50, seed: int = 42):
-        self.max_steps = max_steps
-        self.rng = random.Random(seed)
-        self.step_count = 0
-        self.host_status: dict[str, str] = {}
-        self.last_actions: dict[str, list[str]] = {agent: [] for agent in self.AGENTS}
-
-    def reset(self) -> dict[str, dict[str, Any]]:
-        self.step_count = 0
-        self.host_status = {host: "Operational" for host in self.HOSTS}
-        compromised = self.rng.choice(self.HOSTS)
-        self.host_status[compromised] = "COMPROMISED"
-        self.last_actions = {agent: [] for agent in self.AGENTS}
-        return self._make_observations()
-
-    def get_agent_ids(self) -> list[str]:
-        return list(self.AGENTS)
-
-    def get_host_status(self) -> dict[str, str]:
-        return dict(self.host_status)
-
-    def step(self, actions: dict[str, str]):
-        rewards = {agent: self._apply_action(action) for agent, action in actions.items()}
-        for agent, action in actions.items():
-            history = self.last_actions.setdefault(agent, [])
-            history.append(action)
-            del history[:-3]
-
-        self.step_count += 1
-        self._advance_attack()
-        done = self.step_count >= self.max_steps
-        info = {"host_status": self.get_host_status()}
-        return self._make_observations(), rewards, done, info
-
-    def format_observation(self, agent_id: str, obs: dict[str, Any]) -> str:
-        lines = [
-            "=== Network Status Report ===",
-            f"Agent: {agent_id} | Step: {obs.get('step', self.step_count)}",
-        ]
-        for host in obs.get("hosts", []):
-            status = host["status"]
-            detail = (
-                f"Host: {host['name']} | Status: {status} | "
-                f"Subnet: {host['subnet']}"
-            )
-            if status == "COMPROMISED":
-                detail += " | Anomaly: RootAccess | Severity: CRITICAL"
-            lines.append(detail)
-            lines.append(f"  Processes: {', '.join(host['processes'])}")
-            lines.append(f"  Connections: {', '.join(host['connections'])}")
-
-        recent = self.last_actions.get(agent_id, []) or ["Monitor"]
-        lines.append(f"Recent Actions: {', '.join(recent)}")
-        lines.append(
-            "Messages from teammates: "
-            f"{self._teammate(agent_id)}: Alert - monitor compromised hosts carefully"
-        )
-        return "\n".join(lines)
-
-    def _make_observations(self) -> dict[str, dict[str, Any]]:
-        hosts = []
-        for i, host in enumerate(self.HOSTS):
-            hosts.append({
-                "name": host,
-                "status": self.host_status[host],
-                "subnet": f"restricted_zone_a_subnet_{i % 2}",
-                "processes": ["sshd", "nginx", "python3"] if i % 2 == 0 else ["httpd", "mysqld"],
-                "connections": [f"TCP:80 x{25 + i * 7}", f"HTTPS:443 x{60 + i * 11}"],
-            })
-        return {
-            agent: {"step": self.step_count, "hosts": deepcopy(hosts)}
-            for agent in self.AGENTS
-        }
-
-    def _apply_action(self, action: str) -> float:
-        compromised = [h for h, s in self.host_status.items() if s == "COMPROMISED"]
-        if action in {"Remove", "Restore", "BlockTraffic"}:
-            if compromised:
-                self.host_status[compromised[0]] = "Operational"
-                return 1.0
-            return -1.0
-        if action == "Analyse":
-            return 0.2 if compromised else 0.0
-        if action == "Monitor":
-            return -0.2 if compromised else 0.1
-        return 0.0
-
-    def _advance_attack(self) -> None:
-        if self.step_count % 10 == 0 and not any(
-            status == "COMPROMISED" for status in self.host_status.values()
-        ):
-            self.host_status[self.rng.choice(self.HOSTS)] = "COMPROMISED"
-
-    @staticmethod
-    def _teammate(agent_id: str) -> str:
-        return "blue_agent_1" if agent_id == "blue_agent_0" else "blue_agent_0"
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Factory function
-# ──────────────────────────────────────────────────────────────────────────────
-
-def make_env(max_steps: int = 50, seed: int = 42, use_real_cage: bool = True):
-    """Create the benchmark environment.
-
-    Automatically uses the real CybORG CAGE 4 simulator if it is installed
-    (i.e. inside the Apptainer container on HPC). Falls back to MockCAGE4Wrapper
-    for Colab / local development where CybORG is not available.
+def make_env(max_steps: int = 100, seed: int = 42, **kwargs) -> CAGE4Wrapper:
+    """Create a CAGE 4 environment instance.
 
     Args:
         max_steps: Maximum steps per episode.
         seed:      Random seed for reproducibility.
-        use_real_cage: If False, forces MockCAGE4Wrapper even when CybORG is
-                       installed. Useful for fast unit tests.
-    """
-    if use_real_cage and REAL_CAGE_AVAILABLE:
-        logger.info(f"[CAGE4] Creating RealCAGE4Wrapper (max_steps={max_steps}, seed={seed})")
-        return RealCAGE4Wrapper(max_steps=max_steps, seed=seed)
+        **kwargs:  Ignored (kept for backward compatibility).
 
-    if use_real_cage and not REAL_CAGE_AVAILABLE:
-        logger.warning(
-            "[CAGE4] use_real_cage=True but CybORG is not installed. "
-            "Falling back to MockCAGE4Wrapper. "
-            "Run inside the Apptainer container to use real CAGE 4."
-        )
-    return MockCAGE4Wrapper(max_steps=max_steps, seed=seed)
+    Returns:
+        A CAGE4Wrapper backed by the real CybORG simulator.
+    """
+    logger.info(f"[CAGE4] Creating CAGE4Wrapper (max_steps={max_steps}, seed={seed})")
+    return CAGE4Wrapper(max_steps=max_steps, seed=seed)
