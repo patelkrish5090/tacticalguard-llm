@@ -1,13 +1,12 @@
 """
-Local LLM backend using LLaMA-3.1-8B-Instruct with 4-bit quantization.
+Local LLM backend using LLaMA-3.1-8B-Instruct with optional 4-bit quantization.
 
-Falls back to MockLLM when no GPU is available or model weights are absent.
-The MockLLM returns random valid CAGE 4 actions for CI/CD testing.
+Only real model backends are supported. Missing dependencies or model-loading
+failures are surfaced as errors instead of silently substituting a synthetic
+backend.
 """
 
 import time
-import random
-import warnings
 from typing import Any
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -17,8 +16,8 @@ from typing import Any
 try:
     import torch
     from transformers import (
-        AutoTokenizer,
         AutoModelForCausalLM,
+        AutoTokenizer,
         BitsAndBytesConfig,
         pipeline,
     )
@@ -26,10 +25,6 @@ try:
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
-    warnings.warn(
-        "transformers/torch not available. LocalLLM will fall back to MockLLM.",
-        stacklevel=2,
-    )
 
 
 class LocalLLM:
@@ -48,8 +43,8 @@ class LocalLLM:
     ):
         if not TRANSFORMERS_AVAILABLE:
             raise RuntimeError(
-                "transformers is required for LocalLLM. "
-                "Use MockLLM() instead or install: pip install transformers torch bitsandbytes"
+                "transformers and torch are required for LocalLLM. "
+                "Install: pip install transformers torch bitsandbytes"
             )
 
         self.model_id = model_id
@@ -139,82 +134,20 @@ class LocalLLM:
         }
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Mock LLM — for CI/CD and no-GPU environments
-# ──────────────────────────────────────────────────────────────────────────────
-
-class MockLLM:
+def make_llm(model_type: str = "local_llm", seed: int = 42, **kwargs):
     """
-    Returns random valid CAGE 4 Blue actions.
-    Identical interface to LocalLLM for drop-in replacement.
-    """
-
-    def __init__(self, seed: int = 42):
-        self.rng = random.Random(seed)
-        self.total_calls = 0
-        self.total_tokens = 0
-        self.total_latency_ms = 0.0
-        from src.env.action_space import BLUE_ACTIONS
-        self._actions = BLUE_ACTIONS
-
-    def generate(
-        self,
-        prompt: str,
-        temperature: float = 0.1,
-        max_new_tokens: int = 64,
-    ) -> str:
-        t0 = time.perf_counter()
-        action = self.rng.choice(self._actions)
-        response = (
-            f"Analyzing network observation. The host shows potential anomalous "
-            f"activity that warrants defensive attention.\n"
-            f"ACTION: {action}"
-        )
-        elapsed_ms = (time.perf_counter() - t0) * 1000
-        self.total_calls += 1
-        self.total_tokens += len(response.split())
-        self.total_latency_ms += elapsed_ms
-        return response
-
-    def generate_batch(
-        self,
-        prompts: list[str],
-        temperature: float = 0.7,
-        max_new_tokens: int = 64,
-    ) -> list[str]:
-        return [self.generate(p, temperature=temperature) for p in prompts]
-
-    def get_stats(self) -> dict:
-        avg_lat = (
-            self.total_latency_ms / self.total_calls if self.total_calls > 0 else 0.0
-        )
-        return {
-            "total_calls": self.total_calls,
-            "total_tokens": self.total_tokens,
-            "total_latency_ms": self.total_latency_ms,
-            "avg_latency_ms": avg_lat,
-            "model_id": "mock_llm",
-        }
-
-
-def make_llm(model_type: str = "mock", seed: int = 42, **kwargs):
-    """
-    Factory to create the right LLM backend.
+    Factory to create a real LLM backend.
 
     Args:
-        model_type: 'local_llm' | 'openai_llm' | 'mock'
+        model_type: 'local_llm' | 'openai_llm'
+        seed: Accepted for backward-compatible call sites; real backends may ignore it.
     """
     if model_type == "local_llm":
-        if not TRANSFORMERS_AVAILABLE:
-            warnings.warn("Falling back to MockLLM (transformers not installed).")
-            return MockLLM(seed=seed)
-        try:
-            return LocalLLM(**kwargs)
-        except Exception as e:
-            warnings.warn(f"LocalLLM init failed ({e}). Falling back to MockLLM.")
-            return MockLLM(seed=seed)
-    elif model_type == "openai_llm":
+        return LocalLLM(**kwargs)
+    if model_type == "openai_llm":
         from src.llm_backend.openai_llm import OpenAILLM
+
         return OpenAILLM(**kwargs)
-    else:
-        return MockLLM(seed=seed)
+    raise ValueError(
+        f"Unsupported agent model '{model_type}'. Use 'local_llm' or 'openai_llm'."
+    )

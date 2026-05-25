@@ -28,8 +28,12 @@ def main():
     parser.add_argument("--n_episodes", type=int, default=10)
     parser.add_argument("--n_steps", type=int, default=50)
     parser.add_argument("--output_dir", default="results/")
-    parser.add_argument("--agent_model", default="mock",
-                        help="mock | local_llm | openai_llm")
+    parser.add_argument(
+        "--agent_model",
+        default="local_llm",
+        choices=["local_llm", "openai_llm"],
+        help="local_llm | openai_llm",
+    )
     args = parser.parse_args()
 
     config = {
@@ -40,13 +44,14 @@ def main():
         "n_steps": args.n_steps,
     }
 
-    from src.run_experiment import run_episode
     from src.benchmark.logger import make_log_path, save_jsonl
     from src.benchmark.metrics import Scorecard
+    from src.run_experiment import run_episode
 
     all_logs = []
     try:
         from tqdm import tqdm
+
         ep_iter = tqdm(range(args.n_episodes), desc="Baseline episodes")
     except ImportError:
         ep_iter = range(args.n_episodes)
@@ -73,8 +78,16 @@ def main():
     print("=" * 60)
     print(f"  Episodes: {args.n_episodes}")
     print(f"  Total steps: {len(all_logs)}")
-    print(f"  Mean reward: {sum(rewards)/len(rewards):.3f}" if rewards else "  Mean reward: N/A")
-    print(f"  Mean latency: {sum(latencies)/len(latencies):.1f}ms" if latencies else "  Mean latency: N/A")
+    print(
+        f"  Mean reward: {sum(rewards) / len(rewards):.3f}"
+        if rewards
+        else "  Mean reward: N/A"
+    )
+    print(
+        f"  Mean latency: {sum(latencies) / len(latencies):.1f}ms"
+        if latencies
+        else "  Mean latency: N/A"
+    )
     print(f"  Action distribution:")
     for action, count in actions.most_common():
         pct = 100 * count / len(all_logs)
@@ -86,10 +99,23 @@ def main():
     # Show last 3 log lines
     print("\nLast 3 log records:")
     for record in all_logs[-3:]:
-        print(json.dumps({
-            k: v for k, v in record.items()
-            if k in {"episode", "step", "agent_id", "action_parsed", "reward", "latency_ms"}
-        }))
+        print(
+            json.dumps(
+                {
+                    k: v
+                    for k, v in record.items()
+                    if k
+                    in {
+                        "episode",
+                        "step",
+                        "agent_id",
+                        "action_parsed",
+                        "reward",
+                        "latency_ms",
+                    }
+                }
+            )
+        )
 
 
 if __name__ == "__main__":

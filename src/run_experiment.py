@@ -46,34 +46,43 @@ def _make_attacker(attack_type: str | None, filter_ref=None, seed: int = 42):
         return None
     elif attack_type == "obs_poison":
         from src.attacks.observation_poison import ObservationPoisoner
+
         return ObservationPoisoner(seed=seed)
     elif attack_type == "comm_poison":
         from src.attacks.comm_poison import CommPoisoner
+
         return CommPoisoner(seed=seed)
     elif attack_type == "reward_hack":
         from src.attacks.reward_hack import RewardHacker
+
         return RewardHacker(seed=seed)
     elif attack_type == "prompt_inject":
         from src.attacks.prompt_inject import PromptInjector
+
         return PromptInjector(seed=seed)
     elif attack_type == "multi_step_chain":
         from src.attacks.multi_step_chain import MultiStepAttackChain
+
         return MultiStepAttackChain()
     elif attack_type == "adaptive":
         from src.attacks.observation_poison import ObservationPoisoner
         from src.benchmark.adaptive_attacker import AdaptiveAttacker
+
         base = ObservationPoisoner(seed=seed)
         return AdaptiveAttacker(base, filter_ref=filter_ref, seed=seed)
     else:
         raise ValueError(f"Unknown attack_type: {attack_type}")
 
 
-def _make_filter(defense_layers: list[str], filter_path: str = "data/filter_fitted.pkl"):
+def _make_filter(
+    defense_layers: list[str], filter_path: str = "data/filter_fitted.pkl"
+):
     """Instantiate and optionally load the anomaly filter."""
     if "anomaly_filter" not in defense_layers:
         return None
     try:
         from src.defense.anomaly_filter import SemanticAnomalyFilter
+
         filt = SemanticAnomalyFilter()
         if os.path.exists(filter_path):
             filt.load(filter_path)
@@ -101,14 +110,14 @@ def run_episode(config: dict, episode: int = 0, shared_llm=None) -> list[dict]:
     shared_llm: if provided, reuse this LLM instance instead of loading a new one.
                 Pass this from run_all_experiments.py to avoid reloading on every episode.
     """
-    from src.env.cage4_wrapper import make_env
     from src.env.action_space import parse_llm_output
+    from src.env.cage4_wrapper import make_env
     from src.llm_backend.local_llm import make_llm
 
     env_seed = config.get("env_seed", episode)
     attack_type = config.get("attack_type")
     defense_layers = config.get("defense_layers", [])
-    agent_model = config.get("agent_model", "mock")
+    agent_model = config.get("agent_model", "local_llm")
     n_steps = config.get("n_steps", 100)
     filter_path = config.get("filter_path", "data/filter_fitted.pkl")
     config_name = config.get("name", "experiment")
@@ -133,9 +142,11 @@ def run_episode(config: dict, episode: int = 0, shared_llm=None) -> list[dict]:
     guard = None
     if "provenance" in defense_layers:
         from src.defense.provenance_prompt import ProvenancePromptBuilder
+
         prompter = ProvenancePromptBuilder()
     if "consistency" in defense_layers:
         from src.defense.consistency_guard import SelfConsistencyGuard
+
         guard = SelfConsistencyGuard(llm)
 
     # Episode loop
@@ -159,6 +170,7 @@ def run_episode(config: dict, episode: int = 0, shared_llm=None) -> list[dict]:
 
             if attacker is not None:
                 from src.benchmark.adaptive_attacker import AdaptiveAttacker
+
                 if isinstance(attacker, AdaptiveAttacker):
                     obs_text = attacker.adapt_poison(obs_text, step)
                 else:
@@ -216,23 +228,25 @@ def run_episode(config: dict, episode: int = 0, shared_llm=None) -> list[dict]:
             if hasattr(env, "get_host_status"):
                 host_status = env.get_host_status()
 
-            episode_logs.append({
-                "episode": episode,
-                "step": step,
-                "agent_id": agent_id,
-                "obs_text": obs_text_original[:500],  # truncate for disk
-                "action_parsed": action,
-                "reward": None,  # filled after env.step
-                "latency_ms": latency_ms,
-                "poison_applied": poison_applied,
-                "filter_triggered": filter_triggered,
-                "filter_confidence": confidence,
-                "attack_type": attack_type or "none",
-                "attack_phase": attack_phase,
-                "guard_meta": guard_meta,
-                "host_status": host_status,
-                "config_name": config_name,
-            })
+            episode_logs.append(
+                {
+                    "episode": episode,
+                    "step": step,
+                    "agent_id": agent_id,
+                    "obs_text": obs_text_original[:500],  # truncate for disk
+                    "action_parsed": action,
+                    "reward": None,  # filled after env.step
+                    "latency_ms": latency_ms,
+                    "poison_applied": poison_applied,
+                    "filter_triggered": filter_triggered,
+                    "filter_confidence": confidence,
+                    "attack_type": attack_type or "none",
+                    "attack_phase": attack_phase,
+                    "guard_meta": guard_meta,
+                    "host_status": host_status,
+                    "config_name": config_name,
+                }
+            )
 
         # Step the environment
         obs, rewards, done, info = env.step(actions)
@@ -241,8 +255,11 @@ def run_episode(config: dict, episode: int = 0, shared_llm=None) -> list[dict]:
         for agent_id in env.get_agent_ids():
             # Find the most recent log entry for this agent in this step
             for record in reversed(episode_logs):
-                if record["episode"] == episode and record["step"] == step \
-                        and record["agent_id"] == agent_id:
+                if (
+                    record["episode"] == episode
+                    and record["step"] == step
+                    and record["agent_id"] == agent_id
+                ):
                     record["reward"] = rewards.get(agent_id, 0.0)
                     record["host_status"] = info.get("host_status", {})
                     break
@@ -270,6 +287,7 @@ def main():
 
     try:
         from tqdm import tqdm
+
         episode_iter = tqdm(range(args.n_episodes), desc=f"[{config_name}]")
     except ImportError:
         episode_iter = range(args.n_episodes)
@@ -282,6 +300,7 @@ def main():
     # Save logs
     os.makedirs(args.output_dir, exist_ok=True)
     from src.benchmark.logger import make_log_path
+
     log_path = make_log_path(args.output_dir, config_name)
     save_jsonl(all_logs, log_path)
     logger.info(f"Saved {len(all_logs)} step records to {log_path}")
@@ -296,7 +315,7 @@ def main():
 
     sc.save_csv(
         {config_name: results},
-        os.path.join(args.output_dir, f"scorecard_{config_name}.csv")
+        os.path.join(args.output_dir, f"scorecard_{config_name}.csv"),
     )
 
 

@@ -33,7 +33,7 @@ python run_all_experiments.py
 ## Project Structure
 ```
 src/
-├── env/            - CAGE 4 wrapper + mock environment
+├── env/            - Real CAGE 4 environment wrapper
 ├── llm_backend/    - Local LLM (LLaMA 4-bit) + OpenAI fallback
 ├── attacks/        - 6 attack vectors including novel multi-step chain
 ├── defense/        - 3-layer defense pipeline

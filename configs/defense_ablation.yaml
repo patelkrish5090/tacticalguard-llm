@@ -2,6 +2,6 @@ name: ablation_filter_only
 attack_type: obs_poison
 defense_layers:
   - anomaly_filter
-agent_model: mock
+agent_model: local_llm
 n_steps: 50
 filter_path: data/filter_fitted.pkl

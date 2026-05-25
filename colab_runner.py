@@ -16,17 +16,24 @@
 # ║  CELL 1 — Check GPU                                                 ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 import subprocess
+
 result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
-print(result.stdout if result.returncode == 0 else "No GPU detected — switch to GPU runtime!")
+print(
+    result.stdout
+    if result.returncode == 0
+    else "No GPU detected — switch to GPU runtime!"
+)
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  CELL 2 — Mount Google Drive (recommended: persists results)        ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 from google.colab import drive
-drive.mount('/content/drive')
+
+drive.mount("/content/drive")
 
 import os
+
 os.makedirs("/content/drive/MyDrive/tacticalguard-results", exist_ok=True)
 print("Google Drive mounted ✓")
 
@@ -45,8 +52,10 @@ print("Google Drive mounted ✓")
 # Option C: Already on Drive
 # !cp -r "/content/drive/MyDrive/tacticalguard-llmv2" /content/tacticalguard-llmv2
 
-import os, sys
-os.chdir("/content/tacticalguard-llmv2")   # ← adjust if path differs
+import os
+import sys
+
+os.chdir("/content/tacticalguard-llmv2")  # ← adjust if path differs
 sys.path.insert(0, "/content/tacticalguard-llmv2")
 print("Working directory:", os.getcwd())
 
@@ -75,7 +84,9 @@ get_ipython().system('pip install -q "scikit-learn>=1.4.0"')
 
 # Step 5: Utilities (no numpy pin — Colab has 2.x which is fine)
 get_ipython().system('pip install -q "pyyaml>=6.0.1" "tqdm>=4.66.0" "openai>=1.23.0"')
-get_ipython().system('pip install -q "matplotlib>=3.8.0" "seaborn>=0.13.0" "jsonlines>=4.0.0" "pandas>=2.2.0"')
+get_ipython().system(
+    'pip install -q "matplotlib>=3.8.0" "seaborn>=0.13.0" "jsonlines>=4.0.0" "pandas>=2.2.0"'
+)
 
 print("\nAll dependencies installed.")
 print("Verifying critical imports...")
@@ -89,6 +100,7 @@ import_checks = [
     "import typing_extensions; print(f'  typing-extensions {typing_extensions.__version__} ✓')",
 ]
 import subprocess
+
 for check in import_checks:
     r = subprocess.run(["python", "-c", check], capture_output=True, text=True)
     print(r.stdout.strip() if r.returncode == 0 else f"  ✗ {r.stderr.strip()[:80]}")
@@ -99,8 +111,10 @@ for check in import_checks:
 # ║  The dependency conflicts shown are Colab-level WARNING only —     ║
 # ║  they do NOT affect TacticalGuard-LLM code.                        ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-get_ipython().system('git clone -q https://github.com/cage-challenge/cage-challenge-4.git')
-get_ipython().system('pip install -q -e cage-challenge-4/')
+get_ipython().system(
+    "git clone -q https://github.com/cage-challenge/cage-challenge-4.git"
+)
+get_ipython().system("pip install -q -e cage-challenge-4/")
 
 # CRITICAL: CAGE 4 may downgrade typing-extensions again — re-pin it
 get_ipython().system('pip install -q -U "typing-extensions>=4.14.0"')
@@ -115,6 +129,7 @@ print("CAGE 4 installed ✓  |  typing-extensions re-pinned ✓")
 #   Key: OPENAI_API_KEY  Value: sk-proj-xxxxxxxxxxxxxxx  (optional)
 
 import os
+
 from google.colab import userdata
 
 try:
@@ -132,6 +147,7 @@ except Exception:
     print("OPENAI_API_KEY not set — Condition F will be skipped")
 
 from huggingface_hub import login
+
 login(token=os.environ["HF_TOKEN"], add_to_git_credential=False)
 print("HuggingFace login successful ✓")
 
@@ -140,19 +156,23 @@ print("HuggingFace login successful ✓")
 # ║  CELL 7 — Run tests (expected: 26 passed, 2 warnings)              ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 # If you still see typeguard ImportError → re-run Cell 4 and Cell 5 ending
-get_ipython().system('python -m pytest tests/ -v --tb=short 2>&1')
+get_ipython().system("python -m pytest tests/ -v --tb=short 2>&1")
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  CELL 8 — Generate clean data + fit anomaly filter (~3-5 min)      ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-get_ipython().system('python scripts/generate_clean_data.py --n_episodes 200 --n_steps 50')
+get_ipython().system(
+    "python scripts/generate_clean_data.py --n_episodes 200 --n_steps 50"
+)
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║  CELL 9 — Quick smoke test: all 5 conditions with MockLLM (<60s)  ║
+# ║  CELL 9 — Quick smoke test: all 5 conditions                      ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-get_ipython().system('python run_all_experiments.py --n_episodes 10 --conditions A B C D E --skip_openai')
+get_ipython().system(
+    "python run_all_experiments.py --n_episodes 10 --conditions A B C D E --skip_openai"
+)
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
@@ -160,8 +180,10 @@ get_ipython().system('python run_all_experiments.py --n_episodes 10 --conditions
 # ║  ⚠ Expected runtime: ~8-12 hours per condition on T4               ║
 # ║  ⚠ Use A100 (Colab Pro) for faster runs (~2-3 hours per condition) ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-# First, update configs to use local_llm instead of mock:
-import yaml, glob
+# Ensure configs use local_llm and full-length episodes:
+import glob
+
+import yaml
 
 for cfg_path in glob.glob("configs/*.yaml"):
     with open(cfg_path) as f:
@@ -173,7 +195,9 @@ for cfg_path in glob.glob("configs/*.yaml"):
     print(f"Updated {cfg_path}: agent_model=local_llm, n_steps=100")
 
 # Run conditions A-E (skip F if no OpenAI key)
-get_ipython().system('python run_all_experiments.py --n_episodes 50 --conditions A B C D E --skip_openai')
+get_ipython().system(
+    "python run_all_experiments.py --n_episodes 50 --conditions A B C D E --skip_openai"
+)
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
@@ -181,7 +205,7 @@ get_ipython().system('python run_all_experiments.py --n_episodes 50 --conditions
 # ║  Requires OPENAI_API_KEY                                            ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 if os.environ.get("OPENAI_API_KEY"):
-    get_ipython().system('python run_all_experiments.py --n_episodes 50 --conditions F')
+    get_ipython().system("python run_all_experiments.py --n_episodes 50 --conditions F")
 else:
     print("OPENAI_API_KEY not set — skipping Condition F")
     print("To run: set OPENAI_API_KEY in Colab Secrets and re-run this cell")
@@ -190,7 +214,9 @@ else:
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  CELL 14 — Analysis: load results + print table                    ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-import json, os
+import json
+import os
+
 import pandas as pd
 
 results = {}
@@ -211,13 +237,14 @@ else:
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  CELL 15 — Generate plots (saves to results/figures/)              ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-get_ipython().system('python notebooks/analysis.py')
+get_ipython().system("python notebooks/analysis.py")
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  CELL 16 — Copy results to Google Drive (backup)                   ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-import shutil, os
+import os
+import shutil
 
 DRIVE_RESULTS = "/content/drive/MyDrive/tacticalguard-results"
 os.makedirs(DRIVE_RESULTS, exist_ok=True)

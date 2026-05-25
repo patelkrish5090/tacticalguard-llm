@@ -34,7 +34,7 @@ CONDITIONS = {
         "name": "A_baseline",
         "attack_type": None,
         "defense_layers": [],
-        "agent_model": "mock",
+        "agent_model": "local_llm",
         "n_steps": 50,
         "description": "Baseline (no attack, no defense)",
     },
@@ -42,7 +42,7 @@ CONDITIONS = {
         "name": "B_filter_only",
         "attack_type": "obs_poison",
         "defense_layers": ["anomaly_filter"],
-        "agent_model": "mock",
+        "agent_model": "local_llm",
         "n_steps": 50,
         "description": "obs_poison attack vs anomaly_filter",
     },
@@ -50,7 +50,7 @@ CONDITIONS = {
         "name": "C_filter_provenance",
         "attack_type": "obs_poison",
         "defense_layers": ["anomaly_filter", "provenance"],
-        "agent_model": "mock",
+        "agent_model": "local_llm",
         "n_steps": 50,
         "description": "obs_poison attack vs filter + provenance",
     },
@@ -58,7 +58,7 @@ CONDITIONS = {
         "name": "D_full_defense",
         "attack_type": "multi_step_chain",
         "defense_layers": ["anomaly_filter", "provenance", "consistency"],
-        "agent_model": "mock",
+        "agent_model": "local_llm",
         "n_steps": 50,
         "description": "multi_step_chain vs full 3-layer defense",
     },
@@ -66,7 +66,7 @@ CONDITIONS = {
         "name": "E_adaptive_whitebox",
         "attack_type": "adaptive",
         "defense_layers": ["anomaly_filter", "provenance", "consistency"],
-        "agent_model": "mock",
+        "agent_model": "local_llm",
         "n_steps": 50,
         "description": "[NOVEL] Adaptive white-box attacker vs full defense",
     },
@@ -91,16 +91,17 @@ def run_condition(
     shared_llm=None,
 ) -> dict:
     """Run a single experimental condition and return metrics."""
-    from src.run_experiment import run_episode
     from src.benchmark.logger import save_jsonl
     from src.benchmark.metrics import Scorecard
+    from src.run_experiment import run_episode
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Condition {condition_key}: {config['description']}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     try:
         from tqdm import tqdm
+
         ep_iter = tqdm(range(n_episodes), desc=f"Condition {condition_key}")
     except ImportError:
         ep_iter = range(n_episodes)
@@ -132,7 +133,9 @@ def run_condition(
     metrics["description"] = config["description"]
     metrics["elapsed_s"] = elapsed
 
-    scorecard_path = os.path.join(output_dir, f"condition_{condition_key}_scorecard.json")
+    scorecard_path = os.path.join(
+        output_dir, f"condition_{condition_key}_scorecard.json"
+    )
     with open(scorecard_path, "w") as f:
         json.dump(metrics, f, indent=2, default=str)
 
@@ -140,9 +143,11 @@ def run_condition(
         value = metrics.get(name)
         return f"{value:.3f}" if isinstance(value, (int, float)) else "N/A"
 
-    print(f"  CAR: {fmt_metric('CAR')}  "
-          f"MTTF: {fmt_metric('MTTF')}  "
-          f"CatchRate: {fmt_metric('CatchRate')}")
+    print(
+        f"  CAR: {fmt_metric('CAR')}  "
+        f"MTTF: {fmt_metric('MTTF')}  "
+        f"CatchRate: {fmt_metric('CatchRate')}"
+    )
 
     return metrics
 
@@ -175,24 +180,28 @@ def print_comparison_table(all_results: dict[str, dict]) -> None:
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Run all TacticalGuard-LLM conditions")
     parser.add_argument("--n_episodes", type=int, default=N_EPISODES)
     parser.add_argument("--output_dir", default="results/")
     parser.add_argument(
-        "--conditions", nargs="+", default=list(CONDITIONS.keys()),
-        help="Which conditions to run (e.g. A B C)"
+        "--conditions",
+        nargs="+",
+        default=list(CONDITIONS.keys()),
+        help="Which conditions to run (e.g. A B C)",
     )
     parser.add_argument(
-        "--skip_openai", action="store_true",
-        help="Skip condition F (requires OPENAI_API_KEY)"
+        "--skip_openai",
+        action="store_true",
+        help="Skip condition F (requires OPENAI_API_KEY)",
     )
     parser.add_argument(
-        "--agent_model", choices=["mock", "local_llm"],
-        help="Override conditions A-E to use mock or local_llm"
+        "--agent_model",
+        choices=["local_llm"],
+        help="Override conditions A-E to use local_llm",
     )
     parser.add_argument(
-        "--n_steps", type=int,
-        help="Override number of environment steps per episode"
+        "--n_steps", type=int, help="Override number of environment steps per episode"
     )
     args = parser.parse_args()
 
@@ -226,24 +235,29 @@ def main():
 
         # Pre-load the LLM ONCE per condition (not once per episode!)
         # This avoids reloading the 8B model 50 times.
-        agent_model_type = config.get("agent_model", "mock")
+        agent_model_type = config.get("agent_model", "local_llm")
         shared_llm = None
-        if agent_model_type not in ("mock", "openai_llm"):
+        if agent_model_type != "openai_llm":
             from src.llm_backend.local_llm import make_llm
-            print(f"\nPre-loading LLM once for condition {cond_key} ({agent_model_type})...")
+
+            print(
+                f"\nPre-loading LLM once for condition {cond_key} ({agent_model_type})..."
+            )
             shared_llm = make_llm(model_type=agent_model_type)
             print("LLM ready. Starting episodes...")
 
         try:
             metrics = run_condition(
-                cond_key, config, args.n_episodes, args.output_dir,
+                cond_key,
+                config,
+                args.n_episodes,
+                args.output_dir,
                 shared_llm=shared_llm,
             )
             all_results[cond_key] = metrics
         except Exception as e:
             logger.error(f"Condition {cond_key} failed: {e}", exc_info=True)
             skipped.append(cond_key)
-
 
     if not all_results:
         print("No conditions completed successfully.")
@@ -260,6 +274,7 @@ def main():
 
     # Generate LaTeX table
     from src.benchmark.metrics import Scorecard
+
     sc = Scorecard()
     latex = sc.generate_latex_table(all_results)
     latex_path = "paper/tables/results_table.tex"

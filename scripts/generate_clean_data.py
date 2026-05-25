@@ -5,7 +5,7 @@ Usage:
     python scripts/generate_clean_data.py [--n_episodes 200] [--output_dir data/]
 
 Steps:
-  1. Run N clean (no attack) episodes with MockCAGE4Wrapper
+  1. Run N clean (no attack) episodes with the real CAGE 4 environment
   2. Save all observation texts to data/clean_observations.jsonl
   3. Fit SemanticAnomalyFilter on the clean observations
   4. Auto-tune threshold using a held-out 20% validation split
@@ -27,6 +27,7 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 # Also add cwd in case running from a subdirectory
 import os as _os
+
 _cwd = _os.getcwd()
 if _cwd not in sys.path:
     sys.path.insert(0, _cwd)
@@ -40,10 +41,10 @@ logger = logging.getLogger(__name__)
 
 def generate_poisoned_samples(n_samples: int = 200) -> list[str]:
     """Generate sample poisoned observations for threshold tuning validation."""
-    from src.env.cage4_wrapper import make_env
+    from src.attacks.comm_poison import CommPoisoner
     from src.attacks.observation_poison import ObservationPoisoner
     from src.attacks.prompt_inject import PromptInjector
-    from src.attacks.comm_poison import CommPoisoner
+    from src.env.cage4_wrapper import make_env
 
     env = make_env(max_steps=50, seed=9999)
     attackers = [
@@ -77,7 +78,10 @@ def generate_poisoned_samples(n_samples: int = 200) -> list[str]:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Generate clean data + fit anomaly filter")
+
+    parser = argparse.ArgumentParser(
+        description="Generate clean data + fit anomaly filter"
+    )
     parser.add_argument("--n_episodes", type=int, default=200)
     parser.add_argument("--n_steps", type=int, default=50)
     parser.add_argument("--output_dir", default="data/")
